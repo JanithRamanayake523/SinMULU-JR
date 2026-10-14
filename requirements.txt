@@ -1,0 +1,13 @@
+# pin exact versions once the training env is fixed (supervisor rule 0.4)
+torch
+transformers
+peft
+bitsandbytes
+accelerate
+datasets
+huggingface_hub
+pyyaml
+sentencepiece
+protobuf
+numpy
+pandas

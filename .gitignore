@@ -1,0 +1,12 @@
+# test licence forbids redistribution
+data/public test/
+__pycache__/
+*.pyc
+.venv/
+outputs/
+checkpoints/
+*.zip
+
+# benchmark questions with answers (licence: no redistribution)
+data/
+dev/

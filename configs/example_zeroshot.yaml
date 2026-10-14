@@ -1,0 +1,8 @@
+exp_id: zs_qwen25_7b
+model: Qwen/Qwen2.5-7B-Instruct
+revision: null          # TODO pin HF commit hash
+method: zeroshot_logprob
+prompt: subject         # subject | nosubject
+quant: 4bit             # screening only
+seed: 42
+dev: dev/dev.jsonl

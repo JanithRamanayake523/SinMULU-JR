@@ -1,0 +1,13 @@
+exp_id: gemma3_1b_zs
+model: google/gemma-3-1b-it          # gated: accept the Gemma licence on HF and run huggingface-cli login
+revision: null          # pin the HF commit hash after first download (supervisor rule 0.3)
+chat: auto                # auto | on | off  (auto = on only if chat_capable; always QUOTE on/off in YAML)
+chat_capable: true      # verified on the HF model card (instruction-tuned, chat template documented), 2026-10-14
+prompt: nosubject      # nosubject | subject_si | subject_en   (nosubject: no subject name in the prompt)
+perms: 1                # 4 = cyclic permutation averaging
+calibrate: false
+quant: none             # 1B models fit unquantised on a T4
+dtype: fp32             # Gemma 3 overflows in fp16 (no bf16 on T4); 1B in fp32 = ~4 GB, fine
+batch_size: 8
+seed: 42
+enable_thinking: false  # Qwen3 only
