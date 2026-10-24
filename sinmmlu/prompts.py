@@ -44,6 +44,18 @@ EN_COT = "Think step by step in English, then choose the correct or most suitabl
          "End your reply with \"Answer: <number>\".\n"
 EN_HEAD_SI_SUBJECT = "The following is a multiple choice question in Sinhala about {subject}.\n"
 EN_ROLE = "You are an expert Sri Lankan teacher of {subject}.\n"
+EN_HEAD_SUBJECT = "The following is a multiple choice question about {subject}.\n"
+EN_BILINGUAL_COT = ("The question is given in Sinhala, followed by a machine translation into English. "
+                    "The translation may contain errors; the Sinhala text is the original.\n")
+EN_NEG_CHECK = ("Before reasoning, state whether the question asks for the correct option or for the option that is NOT "
+                "correct, does NOT match, or is false. Then think step by step in English and choose the correct or most "
+                "suitable answer from the options 1, 2, 3, 4.\nEnd your reply with \"Answer: <number>\".\n")
+EN_EACH_OPTION = ("Evaluate each of the four options one by one and say whether it is correct or incorrect for this "
+                  "question, thinking in English. Then choose the correct or most suitable answer from the options "
+                  "1, 2, 3, 4.\nEnd your reply with \"Answer: <number>\".\n")
+EN_TRANSLATE_FIRST = ("First translate the question and the four options into English. Then think step by step in "
+                      "English and choose the correct or most suitable answer from the options 1, 2, 3, 4.\n"
+                      "End your reply with \"Answer: <number>\".\n")
 EN_BILINGUAL = ("The following is a multiple choice question in Sinhala, followed by a machine translation into English.\n"
                 "The translation may contain errors; the Sinhala text is the original.\n")
 
@@ -128,6 +140,29 @@ PROMPTS = {
     "cot_en_role": Prompt(lambda r: EN_ROLE.format(subject=subject_en(r)) + _cot_en_subject(r), subject=subject_en,
                           **COT_EN),
     "cot_en_fewshot2": Prompt(_cot_en, shots=2, pool=RATIONALE_POOL, example_reply=lambda e: e["rationale"], **COT_EN),
+    # translation + reasoning (2026-10-24 evening): the winner's teacher-role reasoning with translated input
+    "cot_en_role_bilingual": Prompt(
+        lambda r: EN_ROLE.format(subject=subject_en(r)) + EN_HEAD_SI_SUBJECT.format(subject=subject_en(r))
+        + EN_BILINGUAL_COT + EN_COT + f"\nQuestion (Sinhala): {q_si(r)}\n{options(r['choices'])}\n"
+        f"\nMachine translation (English):\nQuestion: {q_en(r)}\n{options(r['choices_en'])}",
+        subject=subject_en, lang="both", **COT_EN),
+    "cot_en_role_en": Prompt(
+        lambda r: EN_ROLE.format(subject=subject_en(r)) + EN_HEAD_SUBJECT.format(subject=subject_en(r)) + EN_COT
+        + f"\nQuestion: {q_en(r)}\n{options(r['choices_en'])}",
+        subject=subject_en, lang="en", **COT_EN),
+    # question-type handling (2026-10-24 evening): notice negation first / judge every option
+    "cot_en_role_negcheck": Prompt(
+        lambda r: EN_ROLE.format(subject=subject_en(r)) + EN_HEAD_SI_SUBJECT.format(subject=subject_en(r))
+        + EN_NEG_CHECK + f"\nQuestion: {q_si(r)}\n{options(r['choices'])}",
+        subject=subject_en, **COT_EN),
+    "cot_en_role_each_option": Prompt(
+        lambda r: EN_ROLE.format(subject=subject_en(r)) + EN_HEAD_SI_SUBJECT.format(subject=subject_en(r))
+        + EN_EACH_OPTION + f"\nQuestion: {q_si(r)}\n{options(r['choices'])}",
+        subject=subject_en, **COT_EN),
+    "cot_en_role_translate_first": Prompt(
+        lambda r: EN_ROLE.format(subject=subject_en(r)) + EN_HEAD_SI_SUBJECT.format(subject=subject_en(r))
+        + EN_TRANSLATE_FIRST + f"\nQuestion: {q_si(r)}\n{options(r['choices'])}",
+        subject=subject_en, **COT_EN),
     # translation (D1-D5): the translator is part of the condition
     "en_nosubject": Prompt(lambda r: EN_HEAD + EN_INSTR + body(q_en(r), options(r["choices_en"]), "Question", "Answer"),
                            lang="en", answer_word="Answer"),

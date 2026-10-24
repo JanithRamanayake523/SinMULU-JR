@@ -270,18 +270,25 @@ class LM:
                 self._oom_safe(run, idx)
         return out
 
-    def generate(self, prompts, max_new_tokens, rendered=False):
-        """Greedy decoding (deterministic). Returns the generated text only."""
+    def generate(self, prompts, max_new_tokens, rendered=False, sample_seed=None, temperature=0.7, top_p=0.95):
+        """Greedy decoding (deterministic) by default. With sample_seed: nucleus sampling, reseeded per batch from
+        sample_seed + the batch's first index, so a rerun on the same hardware gives the same texts.
+        Returns the generated text only."""
         import torch
         texts = list(prompts) if rendered else [self.render(p) for p in prompts]
         ids_all = self.encode(texts)
         out = [None] * len(ids_all)
         pad = self.tok.pad_token_id
+        if sample_seed is None:
+            decoding = dict(do_sample=False, temperature=None, top_p=None, top_k=None)
+        else:
+            decoding = dict(do_sample=True, temperature=temperature, top_p=top_p, top_k=None)
 
         def run(idx):
             enc = self.tok.pad({"input_ids": [ids_all[j] for j in idx]}, padding=True, return_tensors="pt").to(self.device)
-            g = self.model.generate(**enc, max_new_tokens=max_new_tokens, do_sample=False, temperature=None,
-                                    top_p=None, top_k=None, pad_token_id=pad)
+            if sample_seed is not None:
+                torch.manual_seed(sample_seed + idx[0])
+            g = self.model.generate(**enc, max_new_tokens=max_new_tokens, pad_token_id=pad, **decoding)
             for row, j in enumerate(idx):
                 out[j] = self.tok.decode(g[row, enc["input_ids"].shape[1]:], skip_special_tokens=True).strip()
 

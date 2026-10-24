@@ -278,3 +278,47 @@ def test_select_winner_applies_rule(tmp_path, monkeypatch):
     w = json.loads((tmp_path / "results" / "winner_x.json").read_text(encoding="utf-8"))
     assert w["winner"] == "big" and w["recipe"]["condition"]["prompt"] == "cot_en"
     assert [r["adopted"] for r in w["table"]] == [False, True]
+
+
+def test_reasoning_options_in_exp_id_and_checks():
+    base = {"prompt": "cot_en_role", "chat": "on", "perms": 1, "calibrate": False, "translator": "none"}
+    old = exp_id(MCFG, base, "dev/x.jsonl")
+    assert "__mt" not in old and "__sc" not in old  # earlier experiment ids unchanged
+    assert exp_id(MCFG, dict(base, max_new_tokens=1024), "dev/x.jsonl").endswith("__trnone__mt1024__x")
+    assert "__sc5t0.7" in exp_id(MCFG, dict(base, samples=5, temperature=0.7), "dev/x.jsonl")
+    with pytest.raises(SystemExit):
+        check_condition(dict(base, prompt="paper_nosubject", max_new_tokens=1024), MCFG)
+
+
+def test_self_consistency_soft_and_majority_vote(tmp_path):
+    from sinmmlu.evaluate import run_cot
+    rows = [dict(r) for r in ROWS[:3]]
+
+    class StubLM:
+        def __init__(self):
+            self.calls = []
+
+        def render(self, turns):
+            return turns[-1][1]
+
+        def generate(self, texts, max_new, rendered=False, sample_seed=None, temperature=0.7):
+            self.calls.append((max_new, sample_seed))
+            s = 0 if sample_seed is None else (sample_seed - 42) // 1000
+            # sample 0 and 1 say "2", sample 2 says "3", for every question
+            return [f"reasoning {s}\nAnswer: {3 if s == 2 else 2}" for _ in texts]
+
+        def label_logprobs_text(self, texts, labels):
+            out = []
+            for t in texts:
+                d = 3 if "reasoning 2" in t else 2
+                out.append([0.0 if j + 1 == d else -5.0 for j in range(4)])
+            return out
+
+    lm = StubLM()
+    probs, stats = run_cot(lm, rows, "cot_en", tmp_path, {"samples": 3, "temperature": 0.7, "max_new_tokens": 99})
+    assert [c[0] for c in lm.calls] == [99, 99, 99] and [c[1] for c in lm.calls] == [42, 1042, 2042]
+    assert all(argmax1(p) == 2 for p in probs)
+    assert stats["majority_vote_preds"] == [2, 2, 2] and stats["parse_rate"] == 1.0
+    assert sorted(f.name for f in tmp_path.glob("generations_s*.jsonl")) == [f"generations_s{i}.jsonl" for i in range(3)]
+    run_cot(lm, rows, "cot_en", tmp_path, {"samples": 3, "temperature": 0.7, "max_new_tokens": 99})
+    assert len(lm.calls) == 3  # second run reuses the cached reasoning

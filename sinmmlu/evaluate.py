@@ -63,8 +63,13 @@ def load_model_cfg(p):
 
 def exp_id(mcfg, cond, data):
     tag = "test" if data == "test" else path(data).stem
+    extra = ""  # reasoning options, only when set (keeps the ids of earlier experiments unchanged)
+    if cond.get("max_new_tokens"):
+        extra += f"__mt{cond['max_new_tokens']}"
+    if cond.get("samples", 1) > 1:
+        extra += f"__sc{cond['samples']}t{cond.get('temperature', 0.7)}"
     return (f"{mcfg['name']}__{mcfg['quant']}__{cond['prompt']}__chat{cond['chat']}__p{cond['perms']}"
-            f"__c{int(cond['calibrate'])}__tr{cond['translator']}__{tag}")
+            f"__c{int(cond['calibrate'])}__tr{cond['translator']}{extra}__{tag}")
 
 
 def translator_name(cond, mcfg):
@@ -85,6 +90,8 @@ def check_condition(c, mcfg):
                          "translated prompts need a translator, Sinhala-only prompts must not have one")
     if c["translator"] == "self" and not mcfg["chat_capable"]:
         raise SystemExit("self-translation needs a chat model")
+    if p.method != "cot" and (c.get("max_new_tokens") or c.get("samples", 1) > 1):
+        raise SystemExit(f"{c['prompt']}: --max-new-tokens / --samples only apply to reasoning prompts")
 
 
 # ----------------------------------------------------------------------------- methods
@@ -100,33 +107,61 @@ def parse_answer(text):
     return (int(m[-1].group(1)), m[-1].start()) if m else (None, None)
 
 
-def run_cot(lm, rows, prompt, out_dir):
-    p = P.PROMPTS[prompt]
-    gen_file = out_dir / "generations.jsonl"
+def generate_cached(lm, rows, texts, gen_file, max_new, sample_seed=None, temperature=0.7):
+    """Reasoning text per row, cached in gen_file (an interrupted run resumes)."""
     cached = {g["uid"]: g["text"] for g in load_jsonl(gen_file)} if gen_file.exists() else {}
-    texts = [lm.render(P.build(r, prompt)) for r in rows]
     todo = [i for i, r in enumerate(rows) if r["uid"] not in cached]
     if todo:
-        gens = lm.generate([texts[i] for i in todo], p.max_new_tokens, rendered=True)
+        gens = lm.generate([texts[i] for i in todo], max_new, rendered=True, sample_seed=sample_seed,
+                           temperature=temperature)
         with open(gen_file, "a", encoding="utf-8", newline="\n") as fh:
             for i, g in zip(todo, gens):
                 cached[rows[i]["uid"]] = g
                 fh.write(json.dumps({"uid": rows[i]["uid"], "text": g}, ensure_ascii=False) + "\n")
-    scored, parsed = [], []
-    for r, t in zip(rows, texts):
-        g = cached[r["uid"]]
-        ans, start = parse_answer(g)
-        parsed.append(ans)
-        reasoning = g[:start] if start is not None else g  # cut the stated answer; the cue asks for it again
-        scored.append(t + reasoning.rstrip() + p.cue)
-    lps = lm.label_logprobs_text(scored, p.labels)
-    probs = [softmax(lp) for lp in lps]
-    preds = [argmax1(q) for q in probs]
-    n_parsed = sum(a is not None for a in parsed)
-    stats = {"parse_rate": n_parsed / len(rows),
-             "parsed_agrees_with_scored": sum(a == y for a, y in zip(parsed, preds) if a is not None) / max(n_parsed, 1),
-             "label_mass_mean": sum(sum(math.exp(x) for x in lp) for lp in lps) / len(lps),
-             "label_mass_min": min(sum(math.exp(x) for x in lp) for lp in lps)}
+    return [cached[r["uid"]] for r in rows]
+
+
+def run_cot(lm, rows, prompt, out_dir, cond=None, seed=42):
+    """Greedy reasoning, or self-consistency (cond samples=k > 1): k sampled reasoning texts per question
+    (temperature cond temperature, top-p 0.95, seeds seed+1000*i), each scored after the cue; the k label
+    distributions are averaged (soft vote). stats also report the hard majority vote of the stated answers."""
+    cond = cond or {}
+    p = P.PROMPTS[prompt]
+    max_new = cond.get("max_new_tokens") or p.max_new_tokens
+    k = cond.get("samples", 1)
+    texts = [lm.render(P.build(r, prompt)) for r in rows]
+    probs = [[0.0] * 4 for _ in rows]
+    parsed_all, masses, agree, n_parsed = [], [], 0, 0
+    for s in range(k):
+        if k == 1:
+            gens = generate_cached(lm, rows, texts, out_dir / "generations.jsonl", max_new)
+        else:
+            gens = generate_cached(lm, rows, texts, out_dir / f"generations_s{s}.jsonl", max_new,
+                                   sample_seed=seed + 1000 * s, temperature=cond.get("temperature", 0.7))
+        scored, parsed = [], []
+        for t, g in zip(texts, gens):
+            ans, start = parse_answer(g)
+            parsed.append(ans)
+            reasoning = g[:start] if start is not None else g  # cut the stated answer; the cue asks for it again
+            scored.append(t + reasoning.rstrip() + p.cue)
+        lps = lm.label_logprobs_text(scored, p.labels)
+        for i, lp in enumerate(lps):
+            q = softmax(lp)
+            probs[i] = [a + b / k for a, b in zip(probs[i], q)]
+            masses.append(sum(math.exp(x) for x in lp))
+            if parsed[i] is not None:
+                n_parsed += 1
+                agree += parsed[i] == argmax1(q)
+        parsed_all.append(parsed)
+    stats = {"parse_rate": n_parsed / (len(rows) * k), "parsed_agrees_with_scored": agree / max(n_parsed, 1),
+             "label_mass_mean": sum(masses) / len(masses), "label_mass_min": min(masses),
+             "max_new_tokens": max_new, "samples": k}
+    if k > 1:
+        votes = []
+        for i in range(len(rows)):
+            c = collections.Counter(a for a in (pa[i] for pa in parsed_all) if a is not None)
+            votes.append(max(c, key=lambda a: (c[a], probs[i][a - 1])) if c else argmax1(probs[i]))
+        stats["majority_vote_preds"] = votes
     return probs, stats
 
 
@@ -166,6 +201,9 @@ def save_experiment(eid, data, rows, probs, stats, cfg_extra, limit=None, write_
             if not is_test:
                 rec["gold"] = int(r["answer"])
             fh.write(json.dumps(rec) + "\n")
+    votes = stats.pop("majority_vote_preds", None)  # self-consistency: hard vote of the stated answers
+    if votes and not is_test:
+        stats["majority_vote_acc"] = sum(v == int(r["answer"]) for v, r in zip(votes, rows)) / len(rows)
     summary = {}
     if is_test:
         write_submission(rows, preds, out)
@@ -181,6 +219,8 @@ def save_experiment(eid, data, rows, probs, stats, cfg_extra, limit=None, write_
             msg += " WARNING: < 50% of the probability is on the labels"
     if "parse_rate" in stats:
         msg += f" parse_rate={stats['parse_rate']:.3f}"
+    if "majority_vote_acc" in stats:
+        msg += f" majority_vote_acc={stats['majority_vote_acc']:.4f}"
     if not is_test:
         accs, share = summary["acc"], summary["option_share"]
         msg += "  " + " ".join(f"{l}={accs[l]:.4f}" for l in LEVELS if l in accs)
@@ -211,8 +251,9 @@ def run_condition(model, tok, minfo, mcfg, cond, rows, data, limit, env, force=F
     eid = exp_id(mcfg, cond, data) + ("__smoke" if limit else "")
     out = ROOT / "outputs" / eid
     out.mkdir(parents=True, exist_ok=True)
-    if force and (out / "generations.jsonl").exists():
-        (out / "generations.jsonl").unlink()  # otherwise reasoning from an interrupted run is reused
+    if force:
+        for f in out.glob("generations*.jsonl"):
+            f.unlink()  # otherwise reasoning from an interrupted run is reused
     p = P.PROMPTS[cond["prompt"]]
     if cond["translator"] != "none":
         rows = attach(rows, translator_name(cond, mcfg))
@@ -224,7 +265,7 @@ def run_condition(model, tok, minfo, mcfg, cond, rows, data, limit, env, force=F
     elif p.method == "cloze":
         probs, stats = run_cloze(lm, rows, cond["prompt"])
     else:
-        probs, stats = run_cot(lm, rows, cond["prompt"], out)
+        probs, stats = run_cot(lm, rows, cond["prompt"], out, cond, mcfg["seed"])
     stats.update(max_len=lm.max_len, seconds=round(time.time() - t0, 1))
     save_experiment(eid, data, rows, probs, stats,
                     {"method": p.method, "model_cfg": mcfg, "condition": cond, "model_info": minfo, "env": env,
@@ -249,6 +290,11 @@ def main():
     ap.add_argument("--perms", nargs="+", type=int, default=[1], choices=[1, 2, 3, 4])
     ap.add_argument("--calibrate", nargs="+", type=parse_bool, default=[False])
     ap.add_argument("--translator", nargs="+", default=["none"], choices=["none", "nllb", "madlad", "self"])
+    ap.add_argument("--max-new-tokens", nargs="+", type=int, default=[0],
+                    help="reasoning prompts: override the reasoning length limit (0 = the prompt's own)")
+    ap.add_argument("--samples", nargs="+", type=int, default=[1],
+                    help="reasoning prompts: self-consistency with k sampled reasoning texts (1 = greedy)")
+    ap.add_argument("--temperature", type=float, default=0.7, help="sampling temperature for --samples > 1")
     ap.add_argument("--quant", choices=["none", "4bit", "8bit"], help="override the model config")
     ap.add_argument("--dtype", choices=["auto", "bf16", "fp32", "fp16"], help="override the model config")
     ap.add_argument("--limit", type=int, help="first N rows only (smoke test; no results row)")
@@ -263,9 +309,14 @@ def main():
     if a.limit:
         rows = rows[: a.limit]
     conds = []
-    for prompt, chat, perms, calib, tr in itertools.product(a.prompt, a.chat, a.perms, a.calibrate, a.translator):
+    for prompt, chat, perms, calib, tr, mt, k in itertools.product(a.prompt, a.chat, a.perms, a.calibrate, a.translator,
+                                                                    a.max_new_tokens, a.samples):
         chat = ("on" if mcfg["chat_capable"] else "off") if chat == "auto" else chat
         c = {"prompt": prompt, "chat": chat, "perms": perms, "calibrate": calib, "translator": tr}
+        if mt:
+            c["max_new_tokens"] = mt
+        if k > 1:
+            c.update(samples=k, temperature=a.temperature)
         check_condition(c, mcfg)
         if c not in conds:
             conds.append(c)

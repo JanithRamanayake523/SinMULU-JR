@@ -18,6 +18,10 @@ def evaluate(model_cfg, cond):
     cmd = [sys.executable, "-m", "sinmmlu.evaluate", "--model", model_cfg, "--data", "test",
            "--prompt", cond["prompt"], "--chat", cond["chat"], "--perms", str(cond["perms"]),
            "--calibrate", str(cond["calibrate"]), "--translator", cond["translator"]]
+    if cond.get("max_new_tokens"):
+        cmd += ["--max-new-tokens", str(cond["max_new_tokens"])]
+    if cond.get("samples", 1) > 1:
+        cmd += ["--samples", str(cond["samples"]), "--temperature", str(cond.get("temperature", 0.7))]
     print(">>>", " ".join(cmd), flush=True)
     subprocess.run(cmd, check=True, cwd=ROOT)
 

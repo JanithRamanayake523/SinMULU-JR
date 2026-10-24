@@ -1,5 +1,45 @@
 # Lab notebook (newest first)
 
+## 2026-10-24 night: confirmation of the 1024-token version; submission 2
+inference_rest (vs cot_en_role at 512 tokens, 45.6%): cot_en_role at 1024 tokens 45.6% (+0.0, identical accuracy);
+cot_en_role_negcheck at 1024 44.3% (-1.3, p 0.33). Neither adopted; by the agreed fallback, submission 2 =
+cot_en_role at 1024 tokens. Test run: 4,282 s, longest input 1,371 tokens, stated-answer rate 99.1% (62.4% at 512),
+format validated on the pod and locally; 140 of 2,238 answers differ from submission 1.
+File: submissions/2026-10-24_cot_en_role_mt1024/predictions.zip
+
+## 2026-10-24: question-type handling on the subset (reference cot_en_role at 1024 tokens: 48.9%)
+- cot_en_role_negcheck ("first state whether the question asks for the correct or the NOT-correct option"):
+  **51.4% (+2.5, p 0.48)** -> meets the pre-stated +2 rule, goes to confirmation. But on the 34 negation questions it
+  scores 50.0% vs 58.8% for the reference; the gain comes from non-negation questions (52.5% vs 47.5%), so it is
+  probably wording noise rather than better negation handling.
+- cot_en_role_each_option ("judge each option correct/incorrect"): 38.9% (-10.0, p 0.001): clearly harmful.
+- Question types (subset: negation 34, sub-option 5, blank 16, numeric 30, plain 202). With English reasoning,
+  negation questions are NOT a weak spot (58.8% vs 47.5% plain); they are weak only for direct scoring (35.3%) and for
+  translated input (29-38%). Fill-in-the-blank 62.5%, numeric 43.3%; sub-option n=5 is too small to judge.
+
+## 2026-10-24: translation + reasoning on the subset (reference cot_en_role at 1024 tokens: 48.9%)
+Bilingual input (Sinhala + English translation): MADLAD 49.3% (+0.4), NLLB 47.9% (-1.1), self 41.8% (-7.1, p 0.04).
+English-only (MADLAD) 44.3% (-4.6). Translate-first in one prompt (no extra model) 50.4% (+1.4, p 0.72). Ensemble
+Sinhala-only + bilingual MADLAD 50.4% (+1.4). **No condition reaches the pre-stated +2 points: none goes to
+confirmation; the single-model system stays.**
+Negation: 34/280 subset questions contain a Sinhala negation word. Translations keep an English negation in only
+62% (MADLAD), 59% (NLLB), 56% (self) of them. On these 34 questions, Sinhala-only reasoning scores 58.8% but bilingual
+MADLAD 38.2% and English-only MADLAD 29.4%: lost negations are the clearest way translation hurts (n=34, indicative).
+Side-by-side file: outputs/analysis/translations_inference_subset.md on the pod.
+
+## 2026-10-24: cheap ideas (committed as f11ed8e before starting; pushed to origin/initial-setup)
+- New: `--max-new-tokens` (reasoning limit) and `--samples k --temperature t` (self-consistency: k sampled reasoning
+  texts, seeds 42+1000*i, top-p 0.95, scored label distributions averaged; hard majority vote reported as
+  majority_vote_acc). Experiment ids get `__mt<N>` / `__sc<k>t<t>` only when set.
+- Ensemble of the three confirmed English-reasoning prompts (cot_en + cot_en_role + cot_en_fewshot2):
+  subset 50.4%; **inference_rest 46.7%** (+8.5 vs A0; vs cot_en_role +1.1, 95% CI [-0.9, +3.0], p 0.31).
+  Note: chosen after the confirmation results were known, so its rest number is optimistic.
+- Reasoning limit, cot_en_role on the subset: 512 tokens 48.2% (parse 79.3%); **768 / 1024 / 1536 / 2048 tokens all
+  48.9%** with identical predictions (parse 98.9% / 100% / 100% / 100%): Gemma finishes every Easy answer within
+  ~768 tokens, so the limit only matters for answers that were cut at 512. cot_en at 1024: 47.9% (= 512; parse 99.6%).
+- Self-consistency, cot_en_role, 5 samples, T=0.7, 1024 tokens: 47.5% soft vote and 47.5% majority vote, i.e. no
+  better than greedy (48.9%) at 5x the cost. Not pursued.
+
 ## 2026-10-24: correction: parameter counts
 count_params summed meta-device parameters without tying, so tied embeddings were counted twice. Counted from the
 stored safetensors (runpod/count_params.py): Gemma-3-4B-it/pt **4,300,079,472** (vision tower 419,816,304), MADLAD-400-3B

@@ -10,7 +10,7 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 export HF_HOME=/root/hf_cache PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false
-WAVE="${1:?usage: run_subset.sh smoke|wave1|wave2|wave3|combos|confirm|report}"
+WAVE="${1:?usage: run_subset.sh smoke|wave1|wave2|wave3|combos|confirm|cheap|translation|qtypes|report}"
 mkdir -p logs
 exec > >(tee -a "logs/${WAVE}_$(date +%Y%m%d_%H%M).log") 2>&1
 
@@ -80,6 +80,38 @@ confirm)
     T=__chaton__p1__c0__trnone__inference_rest
     run python -m sinmmlu.ensemble --name ens_cot_si_en --exps ${P}cot_en$T ${P}cot_si$T
     run python -m sinmmlu.report --data $R --baseline ${P}paper_nosubject$T
+    ;;
+cheap)
+    # cheap ideas on the subset (2026-10-24): ensemble of the 3 confirmed English-reasoning prompts, longer reasoning
+    # limits (the winner stated an answer in only 62% of test questions at 512 tokens), self-consistency
+    P=gemma3_4b_it__none__
+    T=__chaton__p1__c0__trnone__inference_subset
+    run python -m sinmmlu.ensemble --name ens_cot3 --exps ${P}cot_en$T ${P}cot_en_role$T ${P}cot_en_fewshot2$T
+    ev --model $M --prompt cot_en_role --max-new-tokens 768 1024 1536 2048
+    ev --model $M --prompt cot_en --max-new-tokens 1024
+    ev --model $M --prompt cot_en_role --max-new-tokens 1024 --samples 5 --temperature 0.7
+    run python -m sinmmlu.report --data "$D" --baseline "$BASELINE"
+    ;;
+translation)
+    # translation + reasoning on the subset (2026-10-24 evening). Reference: cot_en_role at 1024 tokens (48.9%).
+    # Pre-stated rule: a translation condition goes to inference_rest only if it beats the reference by >= 2 points.
+    ev --model $M --prompt cot_en_role_bilingual --translator madlad nllb self --max-new-tokens 1024
+    ev --model $M --prompt cot_en_role_en --translator madlad --max-new-tokens 1024
+    ev --model $M --prompt cot_en_role_translate_first --max-new-tokens 1024
+    P=gemma3_4b_it__none__
+    T=__chaton__p1__c0
+    run python -m sinmmlu.ensemble --name ens_cot_role_si_bilingual_madlad \
+        --exps ${P}cot_en_role${T}__trnone__mt1024__inference_subset ${P}cot_en_role_bilingual${T}__trmadlad__mt1024__inference_subset
+    run python -m sinmmlu.negation --data "$D" --samples 20
+    run python -m sinmmlu.report --data "$D" --baseline ${P}cot_en_role${T}__trnone__mt1024__inference_subset
+    ;;
+qtypes)
+    # question-type handling on the subset (2026-10-24 evening). Reference: cot_en_role at 1024 tokens (48.9%).
+    # Pre-stated rule: goes to inference_rest only if it beats the reference by >= 2 points.
+    ev --model $M --prompt cot_en_role_negcheck cot_en_role_each_option --max-new-tokens 1024
+    run python -m sinmmlu.qtypes --data "$D" --filter gemma3_4b_it
+    run python -m sinmmlu.report --data "$D" \
+        --baseline gemma3_4b_it__none__cot_en_role__chaton__p1__c0__trnone__mt1024__inference_subset
     ;;
 report)
     run python -m sinmmlu.report --data "$D" --baseline "$BASELINE"
