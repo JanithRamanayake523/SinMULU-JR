@@ -1,0 +1,9 @@
+# Comparison model only. Gated on HF.
+name: llama32_3b_it
+model: meta-llama/Llama-3.2-3B-Instruct
+revision: null
+chat_capable: true
+dtype: auto
+quant: none
+batch_size: 8
+seed: 42

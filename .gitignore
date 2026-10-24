@@ -1,12 +1,29 @@
-# test licence forbids redistribution
-data/public test/
-__pycache__/
-*.pyc
-.venv/
-outputs/
-checkpoints/
-*.zip
-
-# benchmark questions with answers (licence: no redistribution)
+# benchmark questions (licence: no redistribution) and everything derived from them
 data/
 dev/
+outputs/
+cache/
+archive/legacy/cluster_package/
+archive/phase0_1b/outputs/
+*.zip
+
+# environment, caches, secrets
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+hf_cache/
+checkpoints/
+logs/
+.hf_token
+
+# raw results copied from the pod (dev predictions and generations)
+runpod_results/
+submissions/
+report/*.log
+report/*.aux
+report/*.toc
+report/*.out
+report/*.xdv
+report/*.fls
+report/*.fdb_latexmk

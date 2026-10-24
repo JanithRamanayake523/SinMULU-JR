@@ -1,0 +1,10 @@
+# Size reference for Gemma-3-4B (phase 0: at chance on Easy dev). Gated on HF.
+name: gemma3_1b_it
+model: google/gemma-3-1b-it
+revision: null
+chat_capable: true
+dtype: auto
+quant: none
+batch_size: 32
+seed: 42
+gen_batch_size: 32

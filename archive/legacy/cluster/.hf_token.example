@@ -1,0 +1,3 @@
+# Do NOT put the token in THIS file. Create a new file named .hf_token (same folder, on the server only) that contains just
+# your Hugging Face read token on a single line, then run: chmod 600 .hf_token
+# scripts/env.sh reads it automatically. Never copy .hf_token off the server or into git.

@@ -1,0 +1,811 @@
+% Technical report: SinMULU-JR at the Sinhala MMLU Shared Task (ICTer 2026)
+% Compile with XeLaTeX (Sinhala text needs fontspec + HarfBuzz):  latexmk -xelatex report.tex
+\documentclass[10pt,a4paper]{article}
+\usepackage[margin=2.2cm]{geometry}
+\usepackage{fontspec}
+\setmainfont{Latin Modern Roman}
+\setmonofont{Latin Modern Mono}[Scale=0.95]
+\newfontfamily\sinhalafont{Nirmala UI}[Script=Sinhala]
+\newcommand{\si}[1]{{\sinhalafont #1}}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{amsmath}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage[font=small,labelfont=bf]{caption}
+\usepackage{fancyvrb}
+\usepackage[hidelinks]{hyperref}
+\setlist{nosep,leftmargin=*}
+\definecolor{best}{RGB}{0,100,0}
+\newcommand{\best}[1]{\textbf{\textcolor{best}{#1}}}
+\newcommand{\cond}[1]{\texttt{#1}}
+\newcommand{\todo}[1]{\textcolor{red}{[#1]}}
+\renewcommand{\arraystretch}{1.12}
+
+\title{\textbf{SinMULU-JR at the Sinhala MMLU Shared Task (ICTer 2026):\\
+English Reasoning over Sinhala Questions with Gemma-3-4B}\\[4pt]
+\large Technical report: data, method, every experiment, and the first submission}
+\author{Team SinMULU-JR}
+\date{24 October 2026 (leaderboard closes 27 October 2026)}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent We describe our system and the complete experimental record for the Sinhala MMLU Shared Task at ICTer 2026,
+whose test set consists of 2,238 four-option multiple-choice questions from Sri Lankan 2025 school examinations
+(Easy, Medium, Hard). Under the task's 8B-parameter, open-weight, no-retrieval rules and a time budget of a few days, we
+use a single model, \texttt{google/gemma-3-4b-it} (4.30B parameters), without fine-tuning, and study 40 inference-time
+conditions: prompt wording, subject and role information, few-shot examples, option-order averaging, contextual
+calibration, cloze scoring, 4-bit quantisation, a pretrained base model, chain-of-thought reasoning in Sinhala and in
+English, and three Sinhala$\rightarrow$English translation pipelines (NLLB-200, MADLAD-400, self-translation).
+Conditions were screened on a 280-question stratified subset of the public (Easy-only) training data and the four best
+were confirmed on 1,483 held-out questions under a selection rule fixed before the confirmation results were seen.
+\textbf{Letting Gemma reason step by step in English about the Sinhala question, then scoring the answer digit, raises
+accuracy from 38.2\% to 45.6\% (+7.4 points, Holm-corrected $p = 1.2\times10^{-6}$, $n=1{,}483$).} Translation
+pipelines, calibration, option-order averaging, and cloze scoring did not help. We also report a scoring pitfall that
+silently reduces next-token evaluation of Gemma to chance: the space before the answer digit is a separate token, so
+the reply must be pre-filled with ``\si{පිළිතුර}: '' (with a trailing space); without it only 5\% of the probability falls
+on the four digits. The first submission (English reasoning with a teacher role) has been produced and validated;
+its leaderboard score is \todo{to be filled in after the Codabench upload}.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+%=====================================================================================================================
+\section{Introduction}
+SinhalaMMLU \cite{pramodya2025} is the first multitask language-understanding benchmark for Sinhala, built from Sri
+Lankan national school curricula and examinations, with questions grouped by difficulty: Easy (grades 6--8),
+Medium (O/L level) and Hard (A/L level). The paper finds that open models up to 8B parameters are close to random
+(25\%) and that even Qwen2.5-7B-chat reaches only 30.85\% on Easy questions zero-shot (Table~15 of the paper), while
+Claude 3.5 Sonnet reaches 67.65\% overall. The ICTer 2026 shared task asks participants to improve on this under
+strict constraints (Section~\ref{sec:task}).
+
+Our constraints were mainly time and compute: work on the final system started on 24 October, three days before the
+leaderboard closed, on a single rented RTX~3090. We therefore chose one strong small multilingual model and
+investigated only inference-time methods, with a statistically careful protocol so that the many comparisons
+would not mislead us.
+
+\paragraph{Contributions.}
+\begin{enumerate}
+\item A reproducible evaluation pipeline for Sinhala MCQs (\texttt{sinmmlu/}) with label-mass validity checks,
+paired significance tests, and a strict separation of screening, confirmation and test data.
+\item A systematic screen of 40 inference-time conditions for Gemma-3-4B-it on Sinhala exam questions, and a
+pre-registered confirmation of the best four on 1,483 held-out questions.
+\item The finding that \emph{English} chain-of-thought over the untranslated Sinhala question gives a robust gain
+of about +7 points, while explicit machine translation (NLLB, self-translation) does not help.
+\item A documented scoring pitfall (answer pre-fill and the space token) and several other engineering errors
+that we found and corrected, with their effect on results.
+\end{enumerate}
+
+%=====================================================================================================================
+\section{The shared task}\label{sec:task}
+\subsection{Rules}
+\begin{table}[h]
+\centering\small
+\begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}p{0.38\linewidth}X}
+\toprule
+Rule & How our system complies\\
+\midrule
+$\le$ 8B total parameters across all inference components (MoE counts all experts, LoRA adapters add to the base,
+quantisation does not reduce the count) & One model: Gemma-3-4B-it, 4,300,079,472 parameters including its unused vision
+tower (Section~\ref{sec:params}).\\
+Open-weight models released before 1 October 2026 & Gemma 3 was released in March 2025 (Gemma licence).\\
+No retrieval of any kind (RAG, BM25, dictionaries, lookup tables) & None. Few-shot examples are \emph{fixed per subject}
+and never chosen by similarity to the test question.\\
+Closed APIs only for generating training data, with disclosure & No closed API was used at all.\\
+No training, tuning or prompt design on test questions & Every choice was made on the public training data; test
+questions were only scored to write predictions (one process note in Section~\ref{sec:limits}).\\
+Organisers reproduce every final system from submitted code & Deterministic greedy decoding, pinned library versions,
+model revision hash, one command per step (Section~\ref{sec:repro}).\\
+Cite Pramodya et al., EMNLP 2025 & \cite{pramodya2025}.\\
+\bottomrule
+\end{tabularx}
+\caption{Task rules and compliance.}
+\end{table}
+
+\subsection{Metric, submission format and schedule}
+The leaderboard metric is the \textbf{macro average of the Easy, Medium and Hard accuracies}. Submissions are made on
+Codabench (at most 3 per day) as a zip containing \texttt{predictions.jsonl}, one line per test question, e.g.\
+\verb|{"q_no": 1, "subject": "Art", "category": "Humanities", "level": "easy", "answer": "2"}|.
+The \texttt{answer} is a string; the key fields must be copied verbatim from the test files (their subject strings
+are inconsistent, Section~\ref{sec:data}). Schedule: leaderboard closes 27 October 2026 (23:59), code due
+28 October, system report and slides due 30 October.
+
+%=====================================================================================================================
+\section{Data}\label{sec:data}
+\subsection{Public training and test sets}
+\begin{table}[h]
+\centering\small
+\begin{tabular}{lrrrl}
+\toprule
+Set & Questions & Files (subjects) & Options & Years / level\\
+\midrule
+Public train (with answers) & 1,851 & 14 & 4 & 2018--2023, Easy only (grades 6--8)\\
+Public test, Easy & 642 & 13 & 4 & 2025\\
+Public test, Medium & 1,111 & 13 & 4 & 2025\\
+Public test, Hard & 485 & 15 & 4 & 2025\\
+\midrule
+Public test, total & 2,238 & 41 & 4 & no answers\\
+\bottomrule
+\end{tabular}
+\caption{Public data provided by the organisers.}
+\end{table}
+
+\paragraph{Training-set subjects.} Arts 100, Buddhism 162, Catholicism 132, Christianity 130, Civics 123, Eastern music
+143, Geography 117, Health and Physical Science 130, History 151, Islam 108, Sinhala language and literature 155,
+Dancing 108, Drama and theatre 128, Science 164. Answer distribution: 1:\,473, 2:\,501, 3:\,507, 4:\,370 (option 4 is
+under-represented, 20.0\%).
+
+\paragraph{Test-set subjects.} Easy: the same 13 school subjects as above minus Islam (Art 30, Buddhism 30,
+Catholicism 50, Christianity 58, Civics 30, Dancing 39, Drama 60, Eastern Music 44, Geography 50, Health 36,
+History 40, Science 92, Sinhala 83). Medium (O/L): Agriculture and Food Technology 37, Buddhism 174, Catholicism 40,
+Christianity 38, Civics 159, Communication and Media Studies 40, Dancing 153, Design and Construction Technology 37,
+Eastern Music 36, Geography 41, Health 72, History 125, Sinhala 159. Hard (A/L): Agricultural Science 37, Art 15,
+Biology 50, Biosystem Technology 41, Buddhist Civilization 40, Business Studies 29, Chemistry 14, Communication and Media
+Studies 50, Dancing (Indigenous) 22, Economics 46, Geography 40, Home Economics 29, Physics 22, Political Science 30,
+Sinhala 20. Many Medium and Hard subjects (e.g.\ Biology, Economics, Political Science) have no training data at all.
+
+\paragraph{Data issues found and handled.}
+\begin{itemize}
+\item \textbf{Label error:} Geography (training file \texttt{Geography\_social\_science\_easy\_f\_117.json}) question
+64 had an invalid answer; it was corrected to 3 (2026-10-14).
+\item \textbf{Inconsistent subject strings} inside one file, e.g.\ ``Eastern\_Music'' and ``Eastern Music'',
+``drama and Theatre '' (trailing space), and different English names between train and test (``Arts''/``Art'',
+``Health and Physical Science''/``Health''). Submission keys are copied verbatim; internally every question gets a
+unique id \texttt{<level>/<file>/q<q\_no>}, and the source file is used as the subject key.
+\item \textbf{Zero-width characters:} the zero-width non-joiner (U+200C) appears in 357 of 2,238 test items but only 29
+of 1,851 training items (a legacy-font artefact); it is removed from model inputs. The zero-width joiner (U+200D) is
+kept because it is part of Sinhala conjuncts such as \si{ප්‍ර}.
+\end{itemize}
+
+\paragraph{Data we did not use.} The Hugging Face release \texttt{naist-nlp/SinhalaMMLU} was \emph{deliberately not
+accessed}: its card states that the shared-task Hard test set (``SinhalaMMLU 2.0'') is built from the paper's Hard
+questions with one option removed, so it may contain test questions with answers. It is also gated under
+CC~BY-NC-ND~4.0. No other external data was used for the system described here.
+
+\subsection{Contamination check}
+Every training question was compared with every test question by character 5-gram Jaccard similarity on a
+normalised text (NFC, ZWJ/ZWNJ removed, punctuation and symbols mapped to spaces, lower-cased Latin, blank-runs
+such as ``\ldots'' and ``\_\_\_\_'' removed), computed two ways and exactly for every candidate pair:
+\emph{full} = question + options sorted alphabetically (years reorder options), and \emph{q} = question only (only for
+questions of $\ge$ 25 characters). Classes: \textsc{remove} if full $\ge 0.5$; \textsc{review} if full is in
+$[0.35, 0.5)$ or ($q \ge 0.5$ and full $\ge 0.2$); \textsc{ignored} if $q \ge 0.5$ and full $< 0.2$ (generic stems
+such as ``choose the correctly spelled word''). Stricter thresholds (0.35/0.25) are defined for collected past papers.
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{lrrr}
+\toprule
+Candidates vs.\ public test (2,238) & \textsc{remove} & \textsc{review} & \textsc{ignored}\\
+\midrule
+Public train (1,851) & 18 pairs / 18 items & 100 pairs & 21 pairs\\
+\bottomrule
+\end{tabular}
+\caption{Near-duplicates between public train and test. The 18 \textsc{remove} items (full Jaccard 0.5--0.83) are
+excluded from every evaluation set used for decisions (\texttt{easy\_clean}).}
+\end{table}
+
+\subsection{Evaluation sets}\label{sec:devsets}
+Because the team decided to keep the public training data for \emph{evaluation only}, all model selection uses it as a
+development set. All sets are built deterministically by \texttt{python -m sinmmlu.build\_dev} (seed 42); their id lists
+are version-controlled, and rebuilding on the pod gave byte-identical id lists (MD5 checked).
+\begin{table}[h]
+\centering\small
+\begin{tabularx}{\linewidth}{lrX}
+\toprule
+File & $n$ & Content and use\\
+\midrule
+\texttt{easy\_full} & 1,851 & all public train\\
+\texttt{easy\_clean} & 1,833 & minus the 18 test near-duplicates\\
+\texttt{inference\_subset} & 280 & \textbf{screening set}: 20 random questions from each of the 14 subjects of
+\texttt{easy\_clean} (seed 42). Gold answers 1/2/3/4 = 77/74/74/55, so always answering ``1'' gives 27.5\%
+(the chance line); 95\% interval about $\pm$5.6 points.\\
+\texttt{fewshot\_pool} & 70 & 5 fixed examples per subject, not in the subset (seed 43). The first four of each subject
+have four different answers, so that a $k$-shot prompt does not teach a position bias. The only source of few-shot
+examples.\\
+\texttt{inference\_rest} & 1,483 & \textbf{confirmation set}: the rest of \texttt{easy\_clean}; disjoint from the two
+above; 95\% interval about $\pm$2.5 points.\\
+\bottomrule
+\end{tabularx}
+\caption{Evaluation sets (all from public train, all Easy).}
+\end{table}
+
+%=====================================================================================================================
+\section{Model choice}\label{sec:model}
+\subsection{Phase 0: small models}
+Before the final week, the team screened three small instruction-tuned models on all 1,851 Easy questions with
+next-token scoring of the digits 1--4 (Table~\ref{tab:phase0}). All were at chance. Tokeniser \emph{fertility}
+(tokens per whitespace-separated Sinhala word, over all 1,851 questions) strongly favoured Gemma: 2.96 for
+Gemma-3-1B-it, against 8.66 for Qwen3-0.6B and 10.74 for Llama-3.2-1B-Instruct. Gemma's prompts are therefore about
+three times shorter, and its vocabulary covers Sinhala far better.
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{lcccc}
+\toprule
+Model (chat template on) & 1 order & 4 orders & calibrated & label mass\\
+\midrule
+Qwen3-0.6B (``strict'' prompt) & 25.6 & 24.9 & 26.6 & 0.010\\
+Gemma-3-1B-it & 26.6 & 28.3 & 26.7 & 0.984\\
+Llama-3.2-1B-Instruct & 25.6 & 23.7 & 26.5 & 0.873\\
+\bottomrule
+\end{tabular}
+\caption{Phase 0 (14--15 October, Colab T4, full precision), accuracy (\%) on \texttt{easy\_full} ($n$=1,851,
+$\pm$2.0 points). ``Label mass'' is the total probability on the four digit tokens. With the chat template off,
+every model had a label mass of 0.000; Section~\ref{sec:prefill} explains why.}
+\label{tab:phase0}
+\end{table}
+
+\subsection{Gemma-3-4B-it}\label{sec:params}
+Given the time available, we chose \texttt{google/gemma-3-4b-it}\footnote{Hugging Face revision
+\texttt{093f9f388b31de276ce2de164bdc2081324b9767}.} (context length 131,072 tokens), loaded in bfloat16. It is a
+multimodal checkpoint; we use text input only, but count all its parameters.
+Parameters counted from the stored safetensors: \textbf{4,300,079,472} = 3,880,263,168 (language model) + 419,816,304
+(vision tower and projector).
+
+\paragraph{Correction.} Our first parameter counter summed the parameters of an un-initialised (meta-device)
+model without tying shared matrices and therefore counted tied embeddings twice: it reported 4.97B for Gemma-3-4B,
+3.46B for MADLAD-400-3B and 1.40B for NLLB-600M. The correct values are 4.30B, 2.94B (MADLAD stores an untied
+output layer) and 0.62B. An earlier statement in our notes that Gemma + MADLAD (``8.44B'') exceeds the limit was
+therefore wrong: the combination has 7.24B parameters and is allowed. This did not affect any decision
+(Section~\ref{sec:select}).
+
+%=====================================================================================================================
+\section{Method}\label{sec:method}
+\subsection{Label scoring}
+For a question $x$ with options $o_1,\dots,o_4$, a prompt $\pi(x)$ is rendered (with Gemma's chat template unless
+stated otherwise), and the model's next-token distribution is read at the answer position. For each label
+$\ell\in\{1,2,3,4\}$ we take $\log P(\ell \mid \pi(x))$ over the \emph{full} vocabulary, renormalise over the four labels,
+and predict the argmax. This is the scoring used by the SinhalaMMLU paper for open models. We record the
+\textbf{label mass} $\sum_\ell P(\ell\mid\pi(x))$ for every question: if it is low, the model wanted to say
+something else, and the argmax over the four labels is weak evidence. A condition is only trusted if its mean label
+mass is $\ge 0.5$. Prompts are never truncated (an over-long prompt raises an error), batches are left-padded with
+explicit position ids, and any non-finite logit stops the run.
+
+\subsection{The answer pre-fill and the space token}\label{sec:prefill}
+The first test run of the pipeline on Gemma-3-4B-it showed a mean label mass of only about 0.05. Inspecting the
+top next tokens revealed two causes. (i) Gemma begins its reply with a phrase such as
+``\si{වැඩිම ගැළපෙන පිළිතුර}: 2 \ldots'' (``the most suitable answer: 2'') or with ``\texttt{**}'' (Markdown bold), so
+the digit is not the first token. (ii) Gemma's tokenizer encodes ``\verb*| 2|'' as two tokens, a space and ``2'',
+and has no single token for the digit with a leading space, so after ``\ldots:'' the model's next token is the space.
+Table~\ref{tab:prefill} shows the effect on 40 questions.
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{llc}
+\toprule
+Rendering & Text appended after the prompt & Mean label mass\\
+\midrule
+chat template & nothing (generation prompt only) & 0.053\\
+chat template & ``\si{පිළිතුර}:'' & 0.000\\
+chat template & \textbf{``\si{පිළිතුර}:\textvisiblespace''} & \textbf{1.000}\\
+chat template & ``\si{පිළිතුර}:\textvisiblespace**'' & 1.000\\
+raw text (no template) & nothing (prompt ends with ``\si{පිළිතුර}:'') & 0.001\\
+raw text & \textbf{``\textvisiblespace''} & \textbf{0.999}\\
+chat, English instructions & \textbf{``Answer:\textvisiblespace''} & \textbf{1.000}\\
+\bottomrule
+\end{tabular}
+\caption{Answer pre-fill probe, Gemma-3-4B-it, first 40 questions of the subset. \textvisiblespace\ marks the trailing
+space.}
+\label{tab:prefill}
+\end{table}
+
+All label-scored prompts are therefore scored with the reply pre-filled: in chat mode the model turn starts with
+``\textit{answer-word}:\textvisiblespace'' (``\si{පිළිතුර}'' for Sinhala prompts, ``Answer'' for English ones), few-shot
+example answers are written the same way, and raw prompts get a trailing space. Only the bare-digit token is scored.
+With this, the label mass is $\ge 0.997$ for every valid condition. The zero label mass of all chat-off runs in
+phase~0 (Table~\ref{tab:phase0}) is consistent with the same space-token effect. We did not test whether it affects
+other published next-token evaluations of Sinhala.
+
+\subsection{Option-order averaging and contextual calibration}
+\textbf{Averaging} scores each question under the 4 cyclic option orders $\sigma_s(i) = (i+s) \bmod 4$, maps the four
+renormalised label probabilities back to the original options, and averages them. \textbf{Contextual calibration}
+\cite{zhao2021} estimates the model's label prior from three content-free inputs (``N/A'', the empty string, and
+``[MASK]'', each used as the question and as all four options), averages their log-probabilities, and subtracts this
+prior before renormalising. When the prompt shows the subject, one prior is estimated per subject.
+
+\subsection{Cloze scoring}
+The question is shown \emph{without} options, and each option text $o_i$ is scored as a continuation of the pre-filled
+answer: $\frac{1}{|o_i|}\sum_t \log P(o_{i,t}\mid \pi(x), o_{i,<t})$ (mean log-probability per token). The argmax
+over options is the prediction.
+
+\subsection{Reasoning (chain of thought)}\label{sec:cot}
+The model first generates a reasoning text with greedy decoding (at most 512 new tokens in English, 768 in Sinhala,
+since Sinhala needs about three times as many tokens per word). We then (i) find the last ``Answer: $d$'' or
+``\si{පිළිතුර}: $d$'' it wrote (the \emph{parse rate} is the fraction of questions where one is found), (ii) cut the
+reasoning just before it, (iii) append the cue ``\textbackslash n\textbackslash n Answer:\textvisiblespace'' (or
+``\si{පිළිතුර}:\textvisiblespace''), and (iv) score the four labels at that position as above. Every question therefore
+gets a probability vector, also when the reasoning was cut off by the length limit; where an answer was stated,
+the scored answer agrees with it in 99.6--100\% of cases. Generation is deterministic (greedy, fixed seed 42), and the
+reasoning texts are cached so that an interrupted run resumes.
+
+\subsection{Few-shot examples}
+$k$-shot prompts ($k\in\{1,3,5\}$) put $k$ solved examples \emph{of the same subject} before the question, as earlier
+chat turns (user: the example question; assistant: ``\si{පිළිතුර}: $d$''). The examples come only from the fixed
+\texttt{fewshot\_pool}, in a fixed order, so every question of a subject sees the same examples; nothing is chosen by
+similarity to the question. Test subjects are matched to training subjects by the first three letters of the
+English subject name (``Art''$\leftrightarrow$``Arts'', ``Health''$\leftrightarrow$``Health and Physical Science'',
+``Sinhala''$\leftrightarrow$``Sinhala language and literature''); subjects without training examples (most Medium and
+Hard subjects) use a fixed generic set (the first example of each subject).
+
+\paragraph{Worked examples for reasoning.} For \cond{cot\_en\_fewshot2}, Gemma generated English reasoning (prompt
+\cond{cot\_en}) for the 70 pool questions; the 28 whose stated answer was correct were kept, up to and including
+their ``Answer: $d$'' line, as two worked examples per subject. Buddhism had no correct rationale and uses the generic
+fallback. These rationales are model-written, from public training data only.
+
+\subsection{Translation pipelines}\label{sec:translate}
+The question and each option are translated separately into English and cached:
+\begin{itemize}
+\item \textbf{NLLB}: \texttt{facebook/nllb-200-distilled-600M} \cite{nllb2022} (revision \texttt{f8d333a0\ldots},
+615M parameters, CC-BY-NC~4.0), source \texttt{sin\_Sinh}, target \texttt{eng\_Latn}.
+\item \textbf{MADLAD}: \texttt{google/madlad400-3b-mt} \cite{madlad2023} (revision \texttt{fa184c67\ldots}, 2.94B
+parameters, Apache~2.0), input prefix ``\texttt{<2en>}''.
+\item \textbf{Self}: Gemma-3-4B-it itself, prompted ``Translate the following Sinhala text into English. Write only the
+English translation, nothing else.'' (greedy, $\le$ 512 new tokens).
+\end{itemize}
+NLLB and MADLAD are sentence-level systems: texts are split into lines and sentences (after ``.'', ``?'', ``!''),
+each piece is translated with beam search (4 beams, $\le$ 256 new tokens), and the pieces are re-joined;
+pieces without Sinhala letters are copied unchanged. Gemma then answers one of three prompt variants: English only,
+bilingual (Sinhala original followed by the English translation, with a note that the translation may contain errors),
+or the Sinhala question with English options. On the subset, NLLB translated 1,402 unique sentence pieces in about a
+minute; MADLAD translated 1,437 pieces (several minutes, run time not recorded).
+
+\subsection{Ensembles}
+An ensemble averages the four option probabilities of finished conditions of the \emph{same} model (so the parameter
+count does not grow) and takes the argmax.
+
+\subsection{Prompts}
+All prompts are in Appendix~\ref{app:prompts}. The baseline \cond{paper\_nosubject} is Appendix~B of the paper
+without the subject line.
+
+%=====================================================================================================================
+\section{Experimental protocol}\label{sec:protocol}
+\paragraph{Stages.}
+\begin{enumerate}
+\item \textbf{Smoke test}: 8 questions through every code path (no results recorded). It found the pre-fill problem.
+\item \textbf{Screening} on \texttt{inference\_subset} ($n$=280) in three waves: (1) prompt wording, chat template,
+averaging, calibration, cloze, 4-bit, model references; (2) few-shot, NLLB and self-translation; (3) reasoning in
+Sinhala and English, MADLAD.
+\item \textbf{Combinations} of the screening winners (also on the subset).
+\item \textbf{Confirmation} on \texttt{inference\_rest} ($n$=1,483) under a rule written into our lab notebook
+before the combination results were seen: take the four best \emph{valid} conditions on the subset (label mass
+$\ge$ 0.5, parameter budget respected, ensembles only within one model) plus the baseline; a condition is
+\emph{adopted} if it beats the baseline by $\ge$ 1 point with Holm-corrected exact McNemar $p<0.05$ over the
+confirmed comparisons; the most accurate adopted condition wins; if none is adopted, the baseline is submitted.
+\item \textbf{Test}: the winner is run once on the 2,238 test questions.
+\end{enumerate}
+
+\paragraph{Statistics.} Accuracy with a 95\% Wilson interval; for every condition against the baseline on the same
+questions: the exact two-sided McNemar test on the discordant pairs, Holm--Bonferroni correction over all conditions
+compared in that table, and a paired bootstrap 95\% interval of the accuracy gain (10,000 resamples of questions,
+seed 0).
+
+\paragraph{Hardware and software.} RunPod pod with one NVIDIA GeForce RTX~3090 (24~GB), 128 vCPUs, 251~GB RAM;
+Python 3.12.3, PyTorch 2.8.0 (CUDA 12.8), Transformers 5.18.0, Accelerate 1.15.0, bitsandbytes 0.50.2, PEFT 0.21.1.
+Gemma in bfloat16 with batch size 16 for scoring and generation; batches are split in halves automatically on GPU
+out-of-memory. 4-bit runs use NF4 with bfloat16 compute.
+
+%=====================================================================================================================
+\section{Results}\label{sec:results}
+\subsection{Screening (280 questions)}
+Table~\ref{tab:screen} lists every condition. The baseline reaches 37.5\%, already well above the 27.5\% chance line.
+
+{\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{longtable}{p{0.5ex}lrrrrrr}
+\caption{Screening on \texttt{inference\_subset} ($n$=280; chance 27.5\%). Gain = accuracy minus baseline (points);
+CI = paired bootstrap 95\% interval of the gain; $p$ = exact McNemar; $p_\text{H}$ = Holm-corrected over the 39
+comparisons of the final table; L = mean label mass. All with Gemma-3-4B-it, chat template, one option order, no
+calibration, bf16, unless stated.}\label{tab:screen}\\
+\toprule
+& Condition & Acc. & Gain & CI of gain & $p$ & $p_\text{H}$ & L\\
+\midrule
+\endfirsthead
+\toprule
+& Condition & Acc. & Gain & CI of gain & $p$ & $p_\text{H}$ & L\\
+\midrule
+\endhead
+\multicolumn{8}{l}{\textit{A: baseline}}\\
+& A0 \cond{paper\_nosubject} & 37.5 & -- & -- & -- & -- & 1.000\\
+& A0b same, chat template off & 37.5 & +0.0 & [$-$4.3, +4.3] & 1.00 & 1.00 & 0.997\\
+\multicolumn{8}{l}{\textit{B: prompt wording}}\\
+& B1 \cond{paper\_subject\_si} (Sinhala subject name) & 42.1 & +4.6 & [+0.0, +9.6] & 0.092 & 1.00 & 1.000\\
+& B2 \cond{paper\_subject\_en} (English subject name) & 40.7 & +3.2 & [$-$1.8, +8.2] & 0.262 & 1.00 & 1.000\\
+& B3 \cond{strict\_nosubject} (``write only the digit'') & 36.8 & $-$0.7 & [$-$5.0, +3.2] & 0.868 & 1.00 & 0.997\\
+& B4 \cond{role\_subject\_si} (Sinhala teacher role + subject) & 43.6 & +6.1 & [+1.1, +11.1] & 0.030 & 0.87 & 1.000\\
+& B5 \cond{en\_instr\_nosubject} (English instructions) & 41.8 & +4.3 & [$-$0.4, +8.9] & 0.088 & 1.00 & 1.000\\
+& B6 \cond{letters\_nosubject} (labels A--D) & 36.4 & \multicolumn{4}{l}{invalid: label mass 0.002} & 0.002\\
+& B7 \cond{fewshot1\_nosubject} & 40.7 & +3.2 & [$-$1.8, +8.6] & 0.281 & 1.00 & 1.000\\
+& B7 \cond{fewshot3\_nosubject} & 42.5 & +5.0 & [$-$0.7, +10.7] & 0.120 & 1.00 & 1.000\\
+& B7 \cond{fewshot5\_nosubject} & 42.1 & +4.6 & [$-$1.1, +10.4] & 0.148 & 1.00 & 1.000\\
+\multicolumn{8}{l}{\textit{C: scoring and model}}\\
+& C1 4 option orders & 38.6 & +1.1 & [$-$3.6, +5.7] & 0.766 & 1.00 & 1.000\\
+& C2 contextual calibration & 34.3 & $-$3.2 & [$-$7.5, +0.7] & 0.163 & 1.00 & 1.000\\
+& C3 4 orders + calibration & 38.2 & +0.7 & [$-$4.3, +5.7] & 0.888 & 1.00 & 1.000\\
+& C4 cloze (\cond{cloze\_nosubject}) & 31.4 & $-$6.1 & [$-$13.6, +1.4] & 0.128 & 1.00 & --\\
+& C6 \cond{cot\_si} (reasoning in Sinhala) & 43.2 & +5.7 & [$-$0.4, +11.8] & 0.085 & 1.00 & 1.000\\
+& C7 \cond{cot\_en} (reasoning in English) & \best{47.9} & \best{+10.4} & [+4.3, +16.4] & 0.0013 & 0.047 & 1.000\\
+& C8 4-bit NF4 & 36.8 & $-$0.7 & [$-$6.4, +5.0] & 0.901 & 1.00 & 1.000\\
+& C9 Gemma-3-4B-\textbf{pt} (base model, raw prompt) & 45.0 & +7.5 & [+0.7, +14.3] & 0.046 & 1.00 & 0.917\\
+& C9 Gemma-3-1B-it & 25.7 & $-$11.8 & [$-$19.3, $-$4.3] & 0.0032 & 0.12 & 1.000\\
+\multicolumn{8}{l}{\textit{D: translation (Gemma answers; translator in brackets)}}\\
+& D1 English only [self] & 37.9 & +0.4 & [$-$6.4, +7.1] & 1.00 & 1.00 & 1.000\\
+& D2 English only [NLLB] & 37.1 & $-$0.4 & [$-$7.5, +6.8] & 1.00 & 1.00 & 0.998\\
+& D3 English only [MADLAD] & 43.9 & +6.4 & [$-$0.7, +13.6] & 0.092 & 1.00 & 1.000\\
+& D4 bilingual [self] & 37.5 & +0.0 & [$-$5.7, +5.7] & 1.00 & 1.00 & 1.000\\
+& D4 bilingual [NLLB] & 40.4 & +2.9 & [$-$2.9, +8.6] & 0.382 & 1.00 & 1.000\\
+& D4 bilingual [MADLAD] & 42.9 & +5.4 & [$-$0.4, +11.1] & 0.082 & 1.00 & 0.998\\
+& D5 Sinhala question, English options [self] & 35.0 & $-$2.5 & [$-$8.9, +3.9] & 0.510 & 1.00 & 0.997\\
+& D5 same [NLLB] & 36.1 & $-$1.4 & [$-$8.2, +5.4] & 0.755 & 1.00 & 1.000\\
+& D5 same [MADLAD] & 37.9 & +0.4 & [$-$5.7, +6.4] & 1.00 & 1.00 & 1.000\\
+\multicolumn{8}{l}{\textit{E: combinations}}\\
+& \cond{cot\_en\_fewshot2} (English reasoning + 2 worked examples) & \best{50.7} & \best{+13.2} & [+7.1, +19.3] & 7.4e-5 & 0.003 & 0.996\\
+& \cond{cot\_en\_role} (English reasoning + teacher role) & 48.2 & +10.7 & [+3.9, +17.5] & 0.0032 & 0.12 & 1.000\\
+& \cond{cot\_en\_subject} (English reasoning + subject) & 46.8 & +9.3 & [+2.9, +15.7] & 0.0073 & 0.24 & 1.000\\
+& \cond{fewshot3\_subject\_si} & 42.9 & +5.4 & [$-$0.4, +11.1] & 0.096 & 1.00 & 1.000\\
+& pt + \cond{fewshot3\_nosubject} & 47.1 & +9.6 & [+3.6, +15.7] & 0.0036 & 0.12 & 0.999\\
+& pt + \cond{fewshot3\_subject\_si} & 46.8 & +9.3 & [+3.2, +15.4] & 0.0049 & 0.16 & 0.999\\
+& pt + \cond{paper\_subject\_si} & 40.4 & +2.9 & [$-$3.6, +9.6] & 0.470 & 1.00 & 0.918\\
+& pt + \cond{role\_subject\_si} & 42.1 & +4.6 & [$-$2.1, +11.4] & 0.218 & 1.00 & 0.894\\
+& ensemble \cond{cot\_en} + \cond{cot\_si} & 49.3 & +11.8 & [+6.1, +17.9] & 1.4e-4 & 0.005 & --\\
+& ensemble \cond{cot\_en} + B4 + B7(3) & 44.6 & +7.1 & [+2.1, +12.1] & 0.0078 & 0.24 & --\\
+& ensemble B4 + B7(3) + B1 + B5 & 44.3 & +6.8 & [+2.1, +11.4] & 0.0079 & 0.24 & --\\
+\bottomrule
+\end{longtable}}
+
+\paragraph{Observations on the screening set.}
+\begin{itemize}
+\item \textbf{Reasoning in English is the strongest single change} (+10.4, the only single condition significant after
+Holm). Reasoning in Sinhala helps less (+5.7) and is slower (450\,s against 350\,s for 280 questions).
+\item \textbf{Telling the model the subject} helps (+3 to +6), as the paper found; a Sinhala teacher role helps most.
+English instructions alone help about as much (+4.3).
+\item \textbf{Few-shot} examples help modestly (+3 to +5); 3 examples are as good as 5.
+\item \textbf{Option-order averaging} changes little (+1.1): Gemma has no strong position preference after the
+pre-fill fix. \textbf{Calibration hurts} ($-$3.2): it shifts predictions towards option 2 (46.8\% of predictions,
+against 26.4\% of gold answers), i.e.\ the content-free prior is a poor estimate of the model's bias here.
+\item \textbf{Cloze scoring is worse} ($-$6.1): Sinhala options of very different lengths and forms are not
+comparable by mean token log-probability.
+\item \textbf{4-bit NF4 costs nothing measurable} ($-$0.7, $p$=0.90), relevant if the organisers reproduce on a
+smaller GPU.
+\item \textbf{The pretrained base model} scores surprisingly well (45.0\%) but has a strong preference for option 1
+(46.4\% of its predictions; 57.5\% with the subject prompt) and a lower label mass (0.92), and it cannot follow the
+chat-style reasoning prompts that won.
+\item \textbf{Letters A--D} are not usable: Gemma answers with a Sinhala letter (e.g.\ \si{ඊ}) or a digit, so only 0.2\%
+of the probability falls on the Latin letters.
+\item \textbf{NLLB and self-translation do not help} (between $-$2.5 and +2.9). MADLAD translation helps more (+6.4
+English only, +5.4 bilingual) but stays below English reasoning; Gemma + MADLAD (7.24B) would be within the
+parameter limit.
+\item \textbf{Gemma-3-1B-it is at chance} (25.7\%).
+\end{itemize}
+
+\subsection{Selection}\label{sec:select}
+By the rule of Section~\ref{sec:protocol}, the confirmation candidates were the four best valid conditions on the
+subset: \cond{cot\_en\_fewshot2} (50.7), the ensemble \cond{cot\_en}+\cond{cot\_si} (49.3), \cond{cot\_en\_role}
+(48.2) and \cond{cot\_en} (47.9). At selection time MADLAD conditions were excluded as over budget because of the
+counting error of Section~\ref{sec:params}; with the correct count they would have been eligible, but the best
+MADLAD condition (43.9) ranked twelfth and would not have been selected.
+
+\subsection{Confirmation (1,483 held-out questions)}
+\begin{table}[h]
+\centering\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrrrcrr}
+\toprule
+Condition & Acc. & Gain & CI of gain & $p$ & $p_\text{H}$ & Adopted & Parse rate & Time (s)\\
+\midrule
+A0 baseline \cond{paper\_nosubject} & 38.2 & -- & -- & -- & -- & -- & -- & 36\\
+\cond{cot\_en\_role} & \best{45.6} & \best{+7.4} & [+4.6, +10.3] & 2.9e-7 & 1.2e-6 & \textbf{yes, winner} & 76.6\% & 2,084\\
+\cond{cot\_en} & 44.9 & +6.7 & [+3.9, +9.6] & 5.5e-6 & 1.7e-5 & yes & 97.0\% & 1,871\\
+\cond{cot\_en\_fewshot2} & 44.8 & +6.6 & [+3.7, +9.6] & 1.6e-5 & 3.2e-5 & yes & 95.5\% & 2,791\\
+ensemble \cond{cot\_en}+\cond{cot\_si} & 44.0 & +5.9 & [+3.2, +8.6] & 3.8e-5 & 3.8e-5 & yes & -- & --\\
+\cond{cot\_si} (ensemble part only) & 36.8 & $-$1.3 & [$-$4.0, +1.3] & 0.36 & -- & -- & 97.4\% & 2,400\\
+\bottomrule
+\end{tabular}
+\caption{Confirmation on \texttt{inference\_rest} ($n$=1,483, $\pm$2.5 points). $p_\text{H}$ is Holm-corrected over the
+four candidates (the selection rule); \cond{cot\_si} was run only as a part of the ensemble and is not a candidate.
+Times are for the 1,483 questions on the RTX~3090.}
+\label{tab:confirm}
+\end{table}
+
+All four candidates beat the baseline clearly; the three English-reasoning variants lie within 0.8 points of each other,
+which is far inside their uncertainty, so the rule's tie-break (highest accuracy) chose \cond{cot\_en\_role}.
+Two subset results did not replicate: the worked examples fell from 50.7\% to 44.8\%, and Sinhala reasoning from
+43.2\% (+5.7) to 36.8\% ($-$1.3). This is the expected regression of the top of a 280-question ranking, and it is why
+decisions were taken only on the confirmation set.
+
+\paragraph{Discordant pairs.} Against the baseline, \cond{cot\_en\_role} is right on 283 questions where the baseline is
+wrong and wrong on 173 where the baseline is right: reasoning changes many answers in both directions, with a clear
+net gain.
+
+\subsection{Per-subject accuracy}
+\begin{table}[h]
+\centering\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabular}{llrrrrrr}
+\toprule
+Subject & & $n$ & A0 & \cond{cot\_en} & \cond{cot\_en\_role} & \cond{cot\_en\_fs2} & \cond{cot\_si}\\
+\midrule
+Arts & \si{චිත්‍ර} & 70 & 42.9 & 44.3 & 45.7 & 42.9 & 50.0\\
+Buddhism & \si{බුද්ධ ධර්මය} & 137 & 33.6 & 44.5 & 40.2 & 40.9 & 36.5\\
+Catholicism & \si{කතෝලික ධර්මය} & 104 & 33.7 & 37.5 & 42.3 & 40.4 & 33.7\\
+Christianity & \si{ක්‍රිස්තියානි ධර්මය} & 103 & 38.8 & 51.5 & 49.5 & 52.4 & 32.0\\
+Civics & \si{පුරවැසි අධ්‍යාපනය} & 96 & 57.3 & 61.5 & 62.5 & 63.5 & 53.1\\
+Eastern music & \si{පෙරදිග සංගීතය} & 118 & 33.1 & 36.4 & 33.9 & 39.0 & 34.8\\
+Geography & \si{භූගෝල විද්‍යාව} & 90 & 34.4 & 52.2 & 40.0 & 50.0 & 41.1\\
+Health and Phys.\ Sci. & \si{සෞඛ්‍ය හා ශාරීරික විද්‍යාව} & 104 & 45.2 & 59.6 & 58.7 & 51.0 & 47.1\\
+History & \si{ඉතිහාසය} & 126 & 27.8 & 35.7 & 32.5 & 34.9 & 24.6\\
+Islam & \si{ඉස්ලාම් ධර්මය} & 83 & 41.0 & 50.6 & 59.0 & 51.8 & 36.1\\
+Sinhala lang.\ and lit. & \si{සිංහල භාෂාව සහ සාහිත්‍යය} & 130 & 35.4 & 33.1 & 40.0 & 34.6 & 29.2\\
+Dancing & \si{නර්තනය} & 82 & 40.2 & 26.8 & 40.2 & 32.9 & 23.2\\
+Drama and theatre & \si{නාට්‍ය හා රංග කලාව} & 101 & 35.6 & 46.5 & 37.6 & 42.6 & 38.6\\
+Science & \si{විද්‍යාව} & 139 & 42.4 & 51.8 & 60.4 & 54.0 & 41.7\\
+\midrule
+All & & 1,483 & 38.2 & 44.9 & 45.6 & 44.8 & 36.8\\
+\bottomrule
+\end{tabular}
+\caption{Accuracy (\%) per subject on the confirmation set (descriptive only; per-subject intervals are $\pm$8--12
+points, so no decision was taken per subject).}
+\label{tab:subjects}
+\end{table}
+
+English reasoning helps most on Geography (+17.8 for \cond{cot\_en}), Health (+14.4), Christianity (+12.7),
+Buddhism (+10.9), Drama (+10.9), Science (+9.4) and Islam (+9.6), i.e.\ content subjects. It does not help, or hurts,
+on the most language- and culture-bound subjects: Sinhala language and literature ($-$2.3) and Dancing ($-$13.4 for
+\cond{cot\_en}; 0.0 with the teacher role). This matches the paper's observation that culturally specific
+knowledge is the hardest part of SinhalaMMLU, and suggests that reasoning in English loses information when the
+question is about the Sinhala language itself.
+
+\subsection{Comparison with the paper}
+Our Easy-level numbers are on public-train questions (2018--2023) and the paper's on its own Easy split, so the
+comparison is indicative only. The paper reports zero-shot Easy accuracy of 30.85\% for Qwen2.5-7B-chat, 34.31\% for
+Llama-3.1-8B and 45.11\% for Qwen2.5-72B-chat (Table~15 of \cite{pramodya2025}). Gemma-3-4B-it scored 38.2\% with
+the paper's own prompt (pre-filled), and 45.6\% with English reasoning, i.e.\ at the level the paper reports for a
+72B model.
+
+\subsection{Test predictions (submission 1)}
+\cond{cot\_en\_role} was run on all 2,238 test questions in 3,083\,s on the RTX~3090 (longest input 961 tokens).
+The file passed format validation twice (on the pod and locally): 2,238 lines, keys identical to the test set, every
+answer in \{``1'',``2'',``3'',``4''\}. The model stated an answer in 62.4\% of its reasoning texts (76.6\% on the
+confirmation set), probably because the longer Medium and Hard questions more often reach the 512-token limit; every
+question still receives a scored answer, and the mean label mass after the cue was 0.998.
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{lrrrr}
+\toprule
+Submission & Easy & Medium & Hard & Macro average\\
+\midrule
+1: \cond{cot\_en\_role} & \todo{--} & \todo{--} & \todo{--} & \todo{--}\\
+\bottomrule
+\end{tabular}
+\caption{Leaderboard results (to be filled in after the Codabench upload).}
+\end{table}
+
+%=====================================================================================================================
+\section{Final system}\label{sec:system}
+\begin{itemize}
+\item \textbf{Model}: \texttt{google/gemma-3-4b-it}, revision \texttt{093f9f38\ldots}, bfloat16, 4,300,079,472
+parameters (only component; 8B limit respected).
+\item \textbf{Input}: NFC normalisation, ZWNJ removed, ZWJ kept; options numbered ``1.''--``4.''; the English subject
+name from the test file.
+\item \textbf{Prompt} (user turn of Gemma's chat template):
+\begin{Verbatim}[fontsize=\small,frame=single]
+You are an expert Sri Lankan teacher of {subject}.
+The following is a multiple choice question in Sinhala about {subject}.
+Think step by step in English, then choose the correct or most suitable answer from the options 1, 2, 3, 4.
+End your reply with "Answer: <number>".
+
+Question: {Sinhala question}
+1. {option 1}
+...
+4. {option 4}
+\end{Verbatim}
+\item \textbf{Decoding}: greedy, at most 512 new tokens; the stated answer (if any) is cut, ``\textbackslash n\textbackslash n
+Answer:\textvisiblespace'' appended, and the argmax over the digit tokens 1--4 is the prediction.
+\item \textbf{No} retrieval, no fine-tuning, no external data, no closed API, no test-time adaptation.
+\end{itemize}
+
+%=====================================================================================================================
+\section{Engineering record: errors found and fixed}\label{sec:bugs}
+Small engineering errors can silently turn a benchmark run into noise. Table~\ref{tab:bugs} lists every error we
+found, including our own.
+
+{\small
+\begin{longtable}{p{0.27\linewidth}p{0.36\linewidth}p{0.3\linewidth}}
+\caption{Errors found during the project.}\label{tab:bugs}\\
+\toprule
+Problem & Effect & Fix\\
+\midrule
+\endfirsthead
+\toprule
+Problem & Effect & Fix\\
+\midrule
+\endhead
+YAML 1.1 parses unquoted \texttt{chat: on} as the boolean \texttt{True} (phase 0) & runs labelled ``chat on'' were
+run with the chat template off & chat mode as a command-line choice; old rows quarantined\\
+Prompts truncated from the right at 1,024 tokens (phase 0) & the answer position was cut off for 9--78 Qwen/Llama
+prompts & no truncation; over-long prompts raise\\
+Dedup ``ignored'' class depended on a thresholded zero (phase 0) & generic-stem pairs mislabelled & both Jaccards
+computed exactly for every pair\\
+4-bit loading used bitsandbytes' default FP4 with fp16 compute; no NaN check & lower 4-bit quality; Gemma 3 can
+overflow in fp16 & NF4 with bf16/fp32 compute; non-finite logits raise\\
+The experiment grid forced full precision & 4-bit runs impossible & \texttt{--quant} option\\
+Calibration with the English subject prompt built its content-free inputs with the Sinhala subject name & wrong
+prior for that condition & content-free inputs copy the real row's metadata\\
+\textbf{No answer pre-fill; Gemma encodes the space before a digit as a separate token} & label mass 0.05, accuracy
+close to random & pre-fill ``\textit{answer-word}:\textvisiblespace'' (Section~\ref{sec:prefill})\\
+RunPod presets \texttt{HF\_HOME} on the 30\,GB volume & disk full during the MADLAD download & model cache on the
+50\,GB container disk\\
+MADLAD with beam 4 and batch 32 ran out of GPU memory (24\,GB) & wave-3 translation failed & automatic batch
+halving on out-of-memory\\
+Parameter counter counted tied embeddings twice & Gemma 4.97B instead of 4.30B; Gemma+MADLAD wrongly reported as
+over 8B & count from the safetensors headers (Section~\ref{sec:params})\\
+\bottomrule
+\end{longtable}}
+
+%=====================================================================================================================
+\section{Reproducibility}\label{sec:repro}
+\paragraph{Code.} Package \texttt{sinmmlu/}: \texttt{data} (loading, normalisation, ids, permutations), \texttt{prompts}
+(prompt registry), \texttt{scoring} (averaging, calibration), \texttt{model} (loading, label/cloze scoring, generation),
+\texttt{evaluate} (runs conditions), \texttt{translate}, \texttt{ensemble}, \texttt{rationales}, \texttt{report}
+(paired statistics), \texttt{select\_winner}, \texttt{predict\_winner}, \texttt{submit} (format validation),
+\texttt{build\_dev}, \texttt{dedup}, \texttt{tokens}, \texttt{debug}. 34 offline tests (including a fake bigram model
+that checks batched label and cloze scoring against an unbatched reference, and a simulated out-of-memory split) run
+without a GPU. Every experiment stores its configuration, model revision, parameter count, library versions, GPU and
+git revision in \texttt{outputs/<experiment>/config.json}.
+
+\paragraph{Commands} (RunPod, after uploading the code and data):
+\begin{Verbatim}[fontsize=\small,frame=single]
+export HF_TOKEN=...                      # read token; Gemma licence accepted
+bash runpod/setup.sh                     # GPU check, pinned libraries, dev files, tests, model downloads
+bash runpod/run_subset.sh smoke          # then wave1, wave2, wave3, combos, confirm
+bash runpod/select_and_test.sh           # selection rule -> winner on the 2,238 test questions
+# or directly, the final system only:
+python -m sinmmlu.evaluate --model configs/models/gemma3_4b_it.yaml --data test \
+       --prompt cot_en_role --chat on
+\end{Verbatim}
+The submission is written to
+\begin{Verbatim}[fontsize=\small]
+outputs/gemma3_4b_it__none__cot_en_role__chaton__p1__c0__trnone__test/predictions.zip
+\end{Verbatim}
+Greedy decoding makes the run deterministic up to floating-point differences between GPUs.
+
+\paragraph{Cost.} All screening, combination, confirmation and test runs together took about 4.5 GPU-hours on one
+RTX~3090: a label-scored condition takes 5--42\,s for 280 questions (few-shot prompts are the slowest), a reasoning
+condition 6--9 minutes.
+
+%=====================================================================================================================
+\section{Limitations}\label{sec:limits}
+\begin{itemize}
+\item \textbf{All development data is Easy.} We have no labelled Medium or Hard questions, so the gains may not transfer
+to O/L and A/L questions, which are two thirds of the metric. The lower parse rate on the test set suggests longer
+reasoning is needed there.
+\item \textbf{Single model, no training.} Fine-tuning (for example on Global-MMLU-si \cite{globalmmlu2025} and the
+public training data) was out of time; the paper rates the naturalness of Global-MMLU-si questions at 71/100
+against 97/100 for native questions, so such data would need care.
+\item \textbf{Screening noise.} With 280 questions, gains below about 7 points cannot be separated; two subset results
+did not replicate. Only the confirmation results should be quoted as findings.
+\item \textbf{Parameter-count error} at selection time (corrected; no effect on the decision).
+\item \textbf{Process note.} When the test-set predictions were checked, the counts of predicted answers (1--4) were
+printed once. Nothing was chosen from them, and no other test-set statistic was looked at.
+\item \textbf{Licences.} NLLB (used only in screening) is CC-BY-NC~4.0; the final system uses only Gemma (Gemma
+terms of use).
+\end{itemize}
+
+\section{Next steps}
+\begin{enumerate}
+\item Longer reasoning budget (768 tokens) to raise the test parse rate, checked on the confirmation set first.
+\item Fine-tuning with LoRA on Global-MMLU-si (and the public training data, if the team agrees) with the answer-digit
+loss, judged by the same confirmation protocol.
+\item MADLAD translation combined with English reasoning (7.24B parameters, within the limit).
+\end{enumerate}
+
+%=====================================================================================================================
+\begin{thebibliography}{9}
+\bibitem{pramodya2025} Ashmari Pramodya, Nirasha Nelki, Heshan Shalinda, Chamila Liyanage, Yusuke Sakai, Randil
+Pushpananda, Ruvan Weerasinghe, Hidetaka Kamigaito, and Taro Watanabe. 2025. SinhalaMMLU: A Comprehensive Benchmark
+for Evaluating Multitask Language Understanding in Sinhala. In \emph{Proceedings of EMNLP 2025}.
+\bibitem{zhao2021} Zihao Zhao, Eric Wallace, Shi Feng, Dan Klein, and Sameer Singh. 2021. Calibrate Before Use:
+Improving Few-Shot Performance of Language Models. In \emph{Proceedings of ICML 2021}.
+\bibitem{nllb2022} NLLB Team. 2022. No Language Left Behind: Scaling Human-Centered Machine Translation.
+\emph{arXiv:2207.04672}.
+\bibitem{madlad2023} Sneha Kudugunta et al. 2023. MADLAD-400: A Multilingual and Document-Level Large Audited Dataset.
+In \emph{NeurIPS 2023 Datasets and Benchmarks}.
+\bibitem{globalmmlu2025} Shivalika Singh et al. 2025. Global MMLU: Understanding and Addressing Cultural and Linguistic
+Biases in Multilingual Evaluation. In \emph{Proceedings of ACL 2025}.
+\bibitem{gemma3} Gemma Team. 2025. Gemma 3 Technical Report. \emph{arXiv:2503.19786}.
+\end{thebibliography}
+
+%=====================================================================================================================
+\appendix
+\section{Prompts (verbatim)}\label{app:prompts}
+Shared pieces (Appendix~B of \cite{pramodya2025}): \textsc{head} = ``\si{පහත දැක්වෙන්නේ බහුවරණ ප්‍රශ්නයකි.}''
+(``The following is a multiple choice question.''); \textsc{head-subject} = ``\si{පහත දැක්වෙන්නේ} \{subject\}
+\si{සම්බන්ධ බහුවරණ ප්‍රශ්නයකි.}''; \textsc{instr} = ``\si{පහත දැක්වෙන ප්‍රශ්නය සඳහා නිවැරදි හෝ වඩාත්ම ගැළපෙන පිළිතුර
+1, 2, 3, 4 පිළිතුරුවලින් තෝරන්න.}'' (``Choose the correct or most suitable answer to the following question from the
+answers 1, 2, 3, 4.''); \textsc{body} = ``\si{ප්‍රශ්නය}: \{question\} / 1. \ldots\ / 4. \ldots\ / \si{පිළිතුර}:''.
+
+{\small
+\begin{longtable}{p{0.24\linewidth}p{0.70\linewidth}}
+\toprule
+Name & Text (user turn; ``/'' = line break)\\
+\midrule
+\endhead
+\cond{paper\_nosubject} (A0) & \textsc{head} / \textsc{instr} / / \textsc{body}\\
+\cond{paper\_subject\_si} (B1) & \textsc{head-subject} with the Sinhala subject name / \textsc{instr} / / \textsc{body}\\
+\cond{paper\_subject\_en} (B2) & as B1 with the English subject name\\
+\cond{strict\_nosubject} (B3) & \textsc{head} / \textsc{instr} / ``\si{ඔබේ පිළිතුර ලෙස 1, 2, 3 හෝ 4 යන ඉලක්කම පමණක්
+ලියන්න. වෙනත් කිසිවක් ලියන්න එපා.}'' (``Write only the digit 1, 2, 3 or 4 as your answer. Do not write anything else.'')
+/ / \textsc{body}\\
+\cond{role\_subject\_si} (B4) & ``\si{ඔබ} \{subject\} \si{විෂය පිළිබඳ ප්‍රවීණ ශ්‍රී ලාංකික ගුරුවරයෙකි.}'' (``You are an
+expert Sri Lankan teacher of the subject \{subject\}.'') / then B1\\
+\cond{en\_instr\_nosubject} (B5) & ``The following is a multiple choice question in Sinhala. / Choose the correct or most
+suitable answer from the options 1, 2, 3, 4. / / Question: \{Sinhala question\} / options / Answer:''\\
+\cond{letters\_nosubject} (B6) & as A0 with ``A, B, C, D'' in \textsc{instr} and options labelled A.--D.\\
+\cond{fewshot$k$\_nosubject} (B7) & $k$ earlier turns (A0 text of an example / ``\si{පිළිතුර}: $d$''), then A0\\
+\cond{fewshot3\_subject\_si} & 3 earlier turns in B1 format, then B1\\
+\cond{cloze\_nosubject} (C4) & ``\si{පහත දැක්වෙන්නේ ප්‍රශ්නයකි. නිවැරදි පිළිතුර ලියන්න.}'' (``The following is a question.
+Write the correct answer.'') / / ``\si{ප්‍රශ්නය}: \{question\} / \si{පිළිතුර}:'' (no options)\\
+\cond{cot\_si} (C6) & \textsc{head} / \textsc{instr} / ``\si{පිළිතුර තෝරා ගැනීමට පෙර පියවරෙන් පියවර සිංහලෙන් තර්ක කරන්න.
+අවසානයේ ``පිළිතුර: <අංකය>'' ලෙස ලියන්න.}'' (``Before choosing the answer, reason step by step in Sinhala. At the end
+write `Answer: <number>'.'') / / question / options\\
+\cond{cot\_en} (C7) & ``The following is a multiple choice question in Sinhala. / Think step by step in English, then
+choose the correct or most suitable answer from the options 1, 2, 3, 4. / End your reply with ``Answer: <number>''. / /
+Question: \{Sinhala question\} / options''\\
+\cond{cot\_en\_subject} & as C7 with ``\ldots question in Sinhala about \{English subject\}.''\\
+\cond{cot\_en\_role} (final) & ``You are an expert Sri Lankan teacher of \{English subject\}.'' / then
+\cond{cot\_en\_subject}\\
+\cond{cot\_en\_fewshot2} & 2 earlier turns (C7 text of an example / the model's own correct English reasoning),
+then C7\\
+\cond{en\_nosubject} (D1--D3) & ``The following is a multiple choice question. / Choose the correct or most suitable
+answer from the options 1, 2, 3, 4. / / Question: \{English translation\} / translated options / Answer:''\\
+\cond{bilingual\_nosubject} (D4) & ``The following is a multiple choice question in Sinhala, followed by a machine
+translation into English. / The translation may contain errors; the Sinhala text is the original. / Choose \ldots /
+/ Sinhala: / \si{ප්‍රශ්නය}: \ldots\ / options / / English: / Question: \ldots\ / translated options / Answer:''\\
+\cond{si\_q\_en\_opts} (D5) & A0 with the options replaced by their English translations\\
+\bottomrule
+\end{longtable}}
+
+\section{Example of a model-written worked example}
+Beginning of the English reasoning that Gemma wrote for an Arts pool question (gold answer 4), used as a worked
+example in \cond{cot\_en\_fewshot2}:
+\begin{Verbatim}[fontsize=\small,frame=single]
+Okay, let's break down this Sinhala multiple-choice question. The question describes a
+statue or image of deities (likely Lakshmi and Saraswati) where one leg is bent and the
+other leg is extended downwards. We need to identify the correct posture described.
+...
+Answer: 4
+\end{Verbatim}
+
+\section{Prediction distributions on the screening set}
+\begin{table}[h]
+\centering\small
+\begin{tabular}{lrrrr}
+\toprule
+Share of predictions (\%) & 1 & 2 & 3 & 4\\
+\midrule
+Gold answers & 27.5 & 26.4 & 26.4 & 19.6\\
+A0 baseline & 22.9 & 30.0 & 33.6 & 13.6\\
+4 option orders & 26.1 & 26.4 & 26.1 & 21.4\\
+Calibration & 5.4 & 46.8 & 35.0 & 12.9\\
+Gemma-3-4B-pt (base model) & 46.4 & 35.7 & 11.8 & 6.1\\
+\cond{cot\_en} & 25.0 & 26.8 & 29.6 & 18.6\\
+\cond{cot\_en\_role} & 26.4 & 26.8 & 26.8 & 20.0\\
+\bottomrule
+\end{tabular}
+\caption{Predicted-option shares on the screening subset. Reasoning prompts give the most balanced predictions.}
+\end{table}
+
+\section{Timeline}
+\begin{itemize}
+\item 14--15 Oct: student phase: data checks (one label fixed), dedup, phase-0 evaluation of 0.6--1B models on a
+Colab T4, three scoring bugs found by review.
+\item 24 Oct: code rebuilt as the \texttt{sinmmlu} package; base model fixed to Gemma-3-4B-it; screening subset built;
+RunPod RTX~3090 set up; smoke test (pre-fill bug found and fixed); waves 1--3; combinations; confirmation;
+first test predictions.
+\item 27 Oct: leaderboard closes. 28 Oct: code. 30 Oct: report and slides.
+\end{itemize}
+
+\end{document}

@@ -1,0 +1,13 @@
+exp_id: llama32_1b_zs
+model: meta-llama/Llama-3.2-1B-Instruct          # gated: accept the Llama 3.2 licence on HF and run huggingface-cli login
+revision: null          # pin the HF commit hash after first download (supervisor rule 0.3)
+chat: auto                # auto | on | off  (auto = on only if chat_capable; always QUOTE on/off in YAML)
+chat_capable: true      # verified on the HF model card (instruction-tuned, chat template documented), 2026-10-14
+prompt: nosubject      # nosubject | nosubject_strict | subject_si | subject_en
+perms: 1                # 4 = cyclic permutation averaging
+calibrate: false
+quant: none             # 1B models fit unquantised on a T4
+dtype: fp16
+batch_size: 8
+seed: 42
+enable_thinking: false  # Qwen3 only

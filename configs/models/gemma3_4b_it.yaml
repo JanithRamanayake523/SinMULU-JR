@@ -1,0 +1,11 @@
+# Base model for the submission. Gated on HF: accept the Gemma licence first.
+# Multimodal checkpoint (text-only use); all parameters, vision tower included, count against the 8B limit.
+name: gemma3_4b_it
+model: google/gemma-3-4b-it
+revision: null          # pin the commit hash after the first download (stored in outputs/*/config.json)
+chat_capable: true      # instruction-tuned, chat template with roles
+dtype: auto             # bf16 where supported (RTX 3090 / A40: yes), else fp32 (never fp16: Gemma 3 overflows)
+quant: none             # none | 4bit (NF4) | 8bit
+batch_size: 16          # scoring forward passes (RTX 3090, 24 GB; halves itself on out-of-memory)
+gen_batch_size: 16      # greedy generation (reasoning, self-translation)
+seed: 42

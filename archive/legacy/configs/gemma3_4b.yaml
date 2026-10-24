@@ -1,0 +1,13 @@
+exp_id: gemma3_4b_zs
+model: google/gemma-3-4b-it          # gated: accept the Gemma licence on HF. Multimodal checkpoint (text-only use here)
+revision: null          # pin the HF commit hash after first download (the run stores the resolved hash in config.json)
+chat: auto                # auto | on | off  (auto = on only if chat_capable; always QUOTE on/off in YAML)
+chat_capable: true      # verified on the HF model card (instruction-tuned, chat template with roles), 2026-10-15
+prompt: nosubject_strict   # nosubject | nosubject_strict | subject_si | subject_en
+perms: 1                # 4 = cyclic permutation averaging
+calibrate: false
+quant: none             # full precision
+dtype: bf16             # the card loads it in bfloat16; fp16 can overflow in Gemma 3. Needs a GPU with bf16 (Ampere or newer); set fp32 otherwise (~17 GB)
+batch_size: 8
+seed: 42
+enable_thinking: false  # Qwen3 only

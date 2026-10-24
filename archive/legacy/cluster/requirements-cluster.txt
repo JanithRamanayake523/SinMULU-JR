@@ -1,0 +1,17 @@
+# Install torch FIRST (build matching the cluster CUDA, see scripts/setup_env.sh). The rest, pinned to the Colab versions
+# that produced the existing results (so the numbers stay comparable):
+transformers==5.18.0
+accelerate==1.15.0
+huggingface_hub==1.33.0
+tokenizers==0.23.2
+safetensors==0.8.0
+sentencepiece==0.2.2
+protobuf==6.33.6
+numpy==2.1.3
+pandas==2.2.3
+matplotlib==3.10.0
+PyYAML==6.0.3
+regex==2025.11.3
+tqdm==4.67.3
+# Colab used torch 2.11.0 (CUDA 13.0), Python 3.12. Another torch / GPU gives tiny numerical differences (fp16 / fp32 kernels);
+# every run records torch, transformers, CUDA and the GPU name in outputs/<exp_id>/config.json.

@@ -1,0 +1,13 @@
+exp_id: llama32_3b_zs
+model: meta-llama/Llama-3.2-3B-Instruct          # gated: accept the Llama 3.2 licence on HF
+revision: null          # pin the HF commit hash after first download (the run stores the resolved hash in config.json)
+chat: auto                # auto | on | off  (auto = on only if chat_capable; always QUOTE on/off in YAML)
+chat_capable: true      # verified on the HF model card (instruction-tuned, chat template with roles), 2026-10-15
+prompt: nosubject_strict   # nosubject | nosubject_strict | subject_si | subject_en
+perms: 1                # 4 = cyclic permutation averaging
+calibrate: false
+quant: none             # full precision
+dtype: bf16             # weights are stored in bfloat16 (card). Use fp16 on a GPU without bf16
+batch_size: 8
+seed: 42
+enable_thinking: false  # Qwen3 only

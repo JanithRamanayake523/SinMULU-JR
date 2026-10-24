@@ -1,0 +1,10 @@
+# Pretrained (not instruction-tuned) Gemma-3-4B: reference for C9. Gated on HF. No chat template -> raw prompts.
+name: gemma3_4b_pt
+model: google/gemma-3-4b-pt
+revision: null
+chat_capable: false
+dtype: auto
+quant: none
+batch_size: 16
+gen_batch_size: 16
+seed: 42

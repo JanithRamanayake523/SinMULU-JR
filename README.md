@@ -1,39 +1,51 @@
-# SinMULU-JR — Sinhala MMLU shared task (ICTer 2026)
+# SinMULU-JR: Sinhala MMLU shared task (ICTer 2026)
 
-Constraints: ≤ 8B total params at inference, open weights released before 2026-10-01, no retrieval, closed APIs only for training-data generation (disclosed).
+Base model: **google/gemma-3-4b-it**. Task rules: ≤ 8B total parameters at inference (every component, LoRA
+included), open weights released before 2026-10-01, no retrieval, closed APIs only for generating training data
+(disclosed), nothing tuned on test questions. Metric: macro average of Easy / Medium / Hard accuracy.
 
+## Layout
 ```
-data/      public train (answers, Easy only) + public test (no answers, gitignored)
-src/       data_utils.py, validate_data.py, build_dev.py, eval_logprob.py*, train_sft.py*, predict.py, (dedup.py: section 2.3, TODO)
-dev/       dev_easy_full.jsonl (all 1851 public train), dev_easy_screen.jsonl (~150, stratified)
-configs/   one YAML per experiment
-results/   results.csv (one row per experiment)
-comments/  supervisor_comments_*, student_comment_*
+sinmmlu/            the code (run every module with python -m sinmmlu.<module>)
+  data.py           loading, normalisation (keep ZWJ, drop ZWNJ), uid, option permutation
+  prompts.py        prompt registry: one name = one exact prompt text
+  scoring.py        option-order averaging + contextual calibration on any label scorer
+  model.py          model loading (bf16/fp32, NF4 4-bit; never fp16), label / cloze scoring, greedy generation
+  evaluate.py       run a model under one or more conditions on dev or test -> outputs/, results/results.csv
+  report.py         paired comparison of finished experiments (McNemar + Holm, bootstrap), per-subject table
+  ensemble.py       average the probabilities of finished experiments (prompt ensembles)
+  translate.py      Sinhala -> English (NLLB, MADLAD, self-translation), cached in cache/translations/
+  submit.py         Codabench predictions.jsonl / zip + format validation
+  build_dev.py      data validation + dev files (easy_full, easy_clean, inference_subset, fewshot_pool, inference_rest)
+  dedup.py          contamination check against the test set
+  tokens.py         tokenizer-only: fertility, prompt lengths
+  debug.py          next-token inspection on dev questions
+configs/models/     one YAML per model
+configs/subsets/    uid lists of dev/inference_subset, fewshot_pool, inference_rest (tracked; dev/ is not)
+runpod/             setup, model download, the screening waves, packing (see runpod/README.md)
+tests/              offline tests (no model): python -m pytest -q
+results/            results.csv (one row per dev experiment), dedup report
+docs/log.md         lab notebook: decisions and results, newest first
+archive/            earlier student code, phase-0 (≤1B) results, old supervisor/student notes
+data/ dev/ outputs/ cache/ gitignored (the test licence forbids redistribution)
 ```
-`*` = stub, planned.
 
-Quick start: `python -X utf8 src/validate_data.py && python -X utf8 src/build_dev.py`
-
-**Team rule:** public train is used for EVALUATION ONLY (no training) until the organisers say otherwise.
-
-## Evaluating models (Gemma-3-1B-it, Llama-3.2-1B-Instruct, Qwen3-0.6B)
-Run on Colab with `colab_eval.ipynb` (sections 1-6). Eval set = public train (Easy only, never trained on); public test is used only to write predictions.
-
-Command line (any machine with a GPU):
+## Workflow
 ```bash
-pip install -r requirements.txt
-huggingface-cli login            # Gemma and Llama are gated: accept the licence on the model page first
-python -X utf8 tests/test_eval_core.py                       # offline logic tests
-python -X utf8 src/run_grid.py --dry-run                      # what is done / still to run
-python -X utf8 src/run_grid.py                                # 18 experiments, skips finished ones
-python -X utf8 src/subject_report.py                          # per-model subject accuracy CSVs
-python -X utf8 src/eval_logprob.py --config configs/gemma3_1b.yaml --data test --chat on --exp-id gemma3_1b_chaton   # test predictions
+pip install -r requirements.txt                 # plus torch for your CUDA version
+python -m sinmmlu.build_dev                     # validate data, write dev/*.jsonl
+python -m pytest -q
+python -m sinmmlu.evaluate --model configs/models/gemma3_4b_it.yaml --data dev/easy_full.jsonl --limit 16   # smoke test
+python -m sinmmlu.evaluate --model configs/models/gemma3_4b_it.yaml --data dev/easy_full.jsonl \
+    --prompt paper_nosubject paper_subject_si --perms 1 4 --calibrate false true
+python -m sinmmlu.report --data dev/easy_full.jsonl --baseline <exp_id>
+python -m sinmmlu.evaluate --model configs/models/gemma3_4b_it.yaml --data test --prompt <best> --perms <best>
 ```
-- Prompt: `nosubject` by default (configs); `--prompt subject_si|subject_en` overrides. The prompt is part of every experiment name.
-- Grid per model: chat on/off x {calib off perms 1, calib off perms 4, calib on perms 1}, full precision. Chat capability is set in each config (`chat_capable`, checked on the model card) and verified against the tokenizer's chat template.
-- Chat mode is always `on` or `off` (quote it in YAML; `auto` = on only if chat-capable). The resolved mode is stored in every run.
-- Prompts are never truncated; a prompt above the model context length raises an error. `src/token_hist.py` plots the prompt token-length distribution per model (tokenizer only).
-- Validity check: `digit_mass` = average total probability on the four answer digits (warning below 0.5).
-- Dev runs print accuracy (+95% CI) and predicted-option share, and append a row to `results/results.csv`. Test runs print no diagnostics.
-- Every run stores library versions, the longest prompt and the resolved HF revision in `outputs/<exp_id>/config.json`.
-- `src/dedup.py` checks candidate data against the test set; `src/purge_invalid.py` quarantines untrustworthy rows (only needed for partial cleanups).
+Experiment id: `<model>__<quant>__<prompt>__chat<on|off>__p<perms>__c<calibrate>__tr<translator>__<data>`. Finished experiments are
+skipped; `--force` reruns. On Windows add `-X utf8` (Sinhala output).
+
+## Rules this code enforces
+- Dev = public train (Easy only). Test rows are only scored to write predictions; test runs print no accuracy-like
+  diagnostics (the label mass is printed as a validity check only).
+- Prompts are never truncated (a too-long prompt raises). Non-finite logits raise.
+- Every run stores the model revision, total parameter count, resolved dtype, library versions and git revision.
