@@ -1,5 +1,13 @@
 # Lab notebook (newest first)
 
+## 2026-10-25: pod terminated
+The RunPod pod was terminated (not stopped), which deleted its /workspace volume. Kept: code (git 4a4aa89),
+submissions 1 and 2 (submissions/), all summary numbers (this notebook), and raw outputs up to the first confirmation
+and test run (runpod_results/). Lost: raw per-question outputs and reasoning texts of the later runs (reasoning limits,
+self-consistency, ensemble, translation + reasoning, negation-check / each-option, submission-2 confirmation), the
+per-type tables, the side-by-side translation file and the translation caches. All are reproducible (greedy decoding,
+fixed seeds). Next pod: Stop instead of Terminate, and copy results before ending a session.
+
 ## 2026-10-24 night: confirmation of the 1024-token version; submission 2
 inference_rest (vs cot_en_role at 512 tokens, 45.6%): cot_en_role at 1024 tokens 45.6% (+0.0, identical accuracy);
 cot_en_role_negcheck at 1024 44.3% (-1.3, p 0.33). Neither adopted; by the agreed fallback, submission 2 =

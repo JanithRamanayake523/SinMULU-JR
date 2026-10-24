@@ -38,19 +38,23 @@ English Reasoning over Sinhala Questions with Gemma-3-4B}\\[4pt]
 \noindent We describe our system and the complete experimental record for the Sinhala MMLU Shared Task at ICTer 2026,
 whose test set consists of 2,238 four-option multiple-choice questions from Sri Lankan 2025 school examinations
 (Easy, Medium, Hard). Under the task's 8B-parameter, open-weight, no-retrieval rules and a time budget of a few days, we
-use a single model, \texttt{google/gemma-3-4b-it} (4.30B parameters), without fine-tuning, and study 40 inference-time
+use a single model, \texttt{google/gemma-3-4b-it} (4.30B parameters), without fine-tuning, and study 55 inference-time
 conditions: prompt wording, subject and role information, few-shot examples, option-order averaging, contextual
 calibration, cloze scoring, 4-bit quantisation, a pretrained base model, chain-of-thought reasoning in Sinhala and in
-English, and three Sinhala$\rightarrow$English translation pipelines (NLLB-200, MADLAD-400, self-translation).
-Conditions were screened on a 280-question stratified subset of the public (Easy-only) training data and the four best
-were confirmed on 1,483 held-out questions under a selection rule fixed before the confirmation results were seen.
+English with different length limits, self-consistency, prompt ensembles, three Sinhala$\rightarrow$English
+translation pipelines (NLLB-200, MADLAD-400, self-translation) with direct and reasoning-based answering, and prompts
+that target negation and option-by-option judgement.
+Conditions were screened on a 280-question stratified subset of the public (Easy-only) training data and the best were
+confirmed on 1,483 held-out questions under selection rules fixed before the confirmation results were seen.
 \textbf{Letting Gemma reason step by step in English about the Sinhala question, then scoring the answer digit, raises
 accuracy from 38.2\% to 45.6\% (+7.4 points, Holm-corrected $p = 1.2\times10^{-6}$, $n=1{,}483$).} Translation
-pipelines, calibration, option-order averaging, and cloze scoring did not help. We also report a scoring pitfall that
-silently reduces next-token evaluation of Gemma to chance: the space before the answer digit is a separate token, so
-the reply must be pre-filled with ``\si{පිළිතුර}: '' (with a trailing space); without it only 5\% of the probability falls
-on the four digits. The first submission (English reasoning with a teacher role) has been produced and validated;
-its leaderboard score is \todo{to be filled in after the Codabench upload}.
+pipelines, calibration, option-order averaging, cloze scoring and self-consistency did not help. Translations drop
+the negation of about 40\% of negated questions, which explains why translated input hurts most on exactly those
+questions, whereas English reasoning over the original Sinhala handles them well. We also report a scoring pitfall
+that silently reduces next-token evaluation of Gemma to chance: the space before the answer digit is a separate token,
+so the reply must be pre-filled with ``\si{පිළිතුර}: '' (with a trailing space); without it only 5\% of the probability
+falls on the four digits. Two submissions have been produced and validated: English reasoning with a teacher role,
+limited to 512 and to 1,024 new tokens; their leaderboard scores are \todo{to be filled in after the Codabench upload}.
 \end{abstract}
 
 \tableofcontents
@@ -74,10 +78,11 @@ would not mislead us.
 \begin{enumerate}
 \item A reproducible evaluation pipeline for Sinhala MCQs (\texttt{sinmmlu/}) with label-mass validity checks,
 paired significance tests, and a strict separation of screening, confirmation and test data.
-\item A systematic screen of 40 inference-time conditions for Gemma-3-4B-it on Sinhala exam questions, and a
-pre-registered confirmation of the best four on 1,483 held-out questions.
+\item A systematic screen of 55 inference-time conditions for Gemma-3-4B-it on Sinhala exam questions, and
+pre-registered confirmations of the best candidates on 1,483 held-out questions.
 \item The finding that \emph{English} chain-of-thought over the untranslated Sinhala question gives a robust gain
-of about +7 points, while explicit machine translation (NLLB, self-translation) does not help.
+of about +7 points, while machine translation (NLLB, MADLAD, self-translation) does not help, also not when combined
+with reasoning, because translations frequently lose negation.
 \item A documented scoring pitfall (answer pre-fill and the space token) and several other engineering errors
 that we found and corrected, with their effect on results.
 \end{enumerate}
@@ -316,7 +321,8 @@ over options is the prediction.
 
 \subsection{Reasoning (chain of thought)}\label{sec:cot}
 The model first generates a reasoning text with greedy decoding (at most 512 new tokens in English, 768 in Sinhala,
-since Sinhala needs about three times as many tokens per word). We then (i) find the last ``Answer: $d$'' or
+since Sinhala needs about three times as many tokens per word; the follow-up experiments and submission 2 use other
+limits, Section~\ref{sec:followup}). We then (i) find the last ``Answer: $d$'' or
 ``\si{පිළිතුර}: $d$'' it wrote (the \emph{parse rate} is the fraction of questions where one is found), (ii) cut the
 reasoning just before it, (iii) append the cue ``\textbackslash n\textbackslash n Answer:\textvisiblespace'' (or
 ``\si{පිළිතුර}:\textvisiblespace''), and (iv) score the four labels at that position as above. Every question therefore
@@ -564,12 +570,147 @@ Llama-3.1-8B and 45.11\% for Qwen2.5-72B-chat (Table~15 of \cite{pramodya2025}).
 the paper's own prompt (pre-filled), and 45.6\% with English reasoning, i.e.\ at the level the paper reports for a
 72B model.
 
-\subsection{Test predictions (submission 1)}
+\subsection{Test predictions: submission 1}
 \cond{cot\_en\_role} was run on all 2,238 test questions in 3,083\,s on the RTX~3090 (longest input 961 tokens).
 The file passed format validation twice (on the pod and locally): 2,238 lines, keys identical to the test set, every
-answer in \{``1'',``2'',``3'',``4''\}. The model stated an answer in 62.4\% of its reasoning texts (76.6\% on the
+answer in \{``1'',``2'',``3'',``4''\}. The model stated an answer in only 62.4\% of its reasoning texts (76.6\% on the
 confirmation set), probably because the longer Medium and Hard questions more often reach the 512-token limit; every
-question still receives a scored answer, and the mean label mass after the cue was 0.998.
+question still receives a scored answer, and the mean label mass after the cue was 0.998. This motivated the
+follow-up experiments below.
+
+%=====================================================================================================================
+\section{Follow-up experiments}\label{sec:followup}
+All follow-up conditions were screened on the same 280 questions and compared with the winner at the same reasoning
+limit. Before each group was run, we fixed the rule that a condition goes to the confirmation set only if it beats
+that reference by at least 2 points on the subset.
+
+\subsection{Reasoning length, self-consistency and a prompt ensemble}
+\textbf{Self-consistency} \cite{wang2023} samples $k$ reasoning texts per question (temperature 0.7, top-$p$ 0.95,
+seeds $42 + 1000i$, reseeded per batch), scores each after the cue, and averages the $k$ label distributions
+(soft vote); the hard majority vote of the stated answers is reported as well. The \textbf{ensemble} averages the
+probabilities of the three confirmed English-reasoning prompts.
+
+\begin{table}[h]
+\centering\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrl}
+\toprule
+Condition (subset, $n$=280) & Acc. & Stated answer & Note\\
+\midrule
+\cond{cot\_en\_role}, 512 new tokens (submission 1) & 48.2 & 79.3\% & about one answer in five cut off\\
+\cond{cot\_en\_role}, 768 new tokens & 48.9 & 98.9\% & \\
+\cond{cot\_en\_role}, 1,024 new tokens & 48.9 & 100\% & identical predictions to 768\\
+\cond{cot\_en\_role}, 1,536 new tokens & 48.9 & 100\% & identical\\
+\cond{cot\_en\_role}, 2,048 new tokens & 48.9 & 100\% & identical\\
+\cond{cot\_en}, 1,024 new tokens & 47.9 & 99.6\% & same accuracy as at 512\\
+\cond{cot\_en\_role}, 1,024, self-consistency $k$=5 & 47.5 & 99.9\% & majority vote also 47.5\\
+ensemble \cond{cot\_en} + \cond{cot\_en\_role} + \cond{cot\_en\_fewshot2} (512) & 50.4 & -- & \\
+\bottomrule
+\end{tabular}
+\caption{Reasoning length, self-consistency and the three-prompt ensemble on the subset.}
+\label{tab:length}
+\end{table}
+
+Gemma finishes every Easy reasoning text within about 768 tokens, so any limit from 768 upwards gives the same
+predictions; the limit only matters for answers that were cut at 512. Self-consistency is no better than greedy
+decoding at five times the cost and was not pursued. The ensemble was also computed on the confirmation set, where
+all its parts already existed: \textbf{46.7\%} (+8.5 over the baseline, 95\% CI [+5.8, +11.2]), but only +1.1 over
+\cond{cot\_en\_role} (95\% CI [$-$0.9, +3.0], $p$ = 0.31). Because it was chosen after the confirmation results were
+known, this number is optimistic, and the ensemble was not adopted.
+
+\subsection{Translation combined with reasoning}
+The English-reasoning winner was given translated input: bilingual (the Sinhala question and options, then the
+machine translation, with a note that the Sinhala text is the original), English only, or a single prompt that asks
+Gemma to translate the question and options itself before reasoning (no second model).
+
+\begin{table}[h]
+\centering\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrrl}
+\toprule
+Condition (subset, 1,024 tokens) & Acc. & Gain & CI of gain & $p$ & Extra model\\
+\midrule
+reference: \cond{cot\_en\_role}, Sinhala input & 48.9 & -- & -- & -- & none\\
+\cond{cot\_en\_role\_translate\_first} & 50.4 & +1.4 & [$-$4.3, +7.1] & 0.72 & none\\
+ensemble: Sinhala input + bilingual (MADLAD) & 50.4 & +1.4 & [$-$3.2, +6.4] & 0.67 & MADLAD\\
+\cond{cot\_en\_role\_bilingual}, MADLAD & 49.3 & +0.4 & [$-$6.4, +6.8] & 1.00 & MADLAD (2.94B)\\
+\cond{cot\_en\_role\_bilingual}, NLLB & 47.9 & $-$1.1 & [$-$7.5, +5.0] & 0.82 & NLLB (0.62B)\\
+\cond{cot\_en\_role\_en} (English only), MADLAD & 44.3 & $-$4.6 & [$-$12.1, +2.5] & 0.25 & MADLAD\\
+\cond{cot\_en\_role\_bilingual}, self-translation & 41.8 & $-$7.1 & [$-$13.2, $-$0.7] & 0.040 & none\\
+\bottomrule
+\end{tabular}
+\caption{Translation combined with English reasoning. No condition reached the pre-stated +2 points.}
+\label{tab:transcot}
+\end{table}
+
+\subsection{Negation and question types}\label{sec:negation}
+For analysis only (never at inference), questions were tagged by simple patterns: \emph{negation} (a Sinhala negation
+or ``wrong'' word such as \si{නොවන}, \si{නොවේ}, \si{නොගැළපේ}, \si{වැරදි}, \si{අසත්‍ය}, \si{සාවද්‍ය} in the question),
+\emph{sub-option} (at least two options name a part letter A--E or a Roman numeral), \emph{blank} (``\ldots'' or
+``\_\_\_\_''), \emph{numeric} (a digit in the question or options), and \emph{plain} (none). The subset has 34 negation,
+5 sub-option, 16 blank, 30 numeric and 202 plain questions; the confirmation set 157, 22, 104, 119 and 1,123.
+
+\begin{table}[h]
+\centering\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrrr}
+\toprule
+Condition (subset) & All & Negation (34) & Blank (16) & Numeric (30) & Plain (202)\\
+\midrule
+A0 baseline (direct scoring) & 37.5 & 35.3 & 25.0 & 33.3 & 39.1\\
+\cond{role\_subject\_si} (direct scoring) & 43.6 & 38.2 & 56.3 & 43.3 & 43.1\\
+\cond{cot\_si} & 43.2 & 38.2 & 31.3 & 46.7 & 44.1\\
+\cond{cot\_en\_role}, 1,024 & 48.9 & \textbf{58.8} & 62.5 & 43.3 & 47.5\\
+\cond{cot\_en\_role\_bilingual}, MADLAD & 49.3 & 38.2 & 56.3 & 50.0 & 50.5\\
+\cond{cot\_en\_role\_en}, MADLAD & 44.3 & 29.4 & -- & -- & --\\
+\cond{cot\_en\_role\_negcheck} & 51.4 & 50.0 & 43.8 & 46.7 & 52.5\\
+\cond{cot\_en\_role\_each\_option} & 38.9 & 38.2 & 37.5 & 43.3 & 38.6\\
+\bottomrule
+\end{tabular}
+\caption{Accuracy (\%) by question type on the subset (descriptive; small groups). Sub-option ($n$=5) omitted.
+``--'': not recorded before the raw outputs were lost (Section~\ref{sec:limits}).}
+\label{tab:qtypes}
+\end{table}
+
+\paragraph{Translations lose negation.} Of the 34 negated subset questions, the English translation still contains a
+negation (``not'', ``except'', ``incorrect'', ``false'', \ldots) in only 21 for MADLAD (62\%), 20 for NLLB (59\%) and
+19 for self-translation (56\%): roughly two negated questions in five become their opposite. On these questions,
+English reasoning over the original Sinhala scores 58.8\%, but 38.2\% with bilingual MADLAD input and 29.4\% with
+English-only input. With English reasoning, negated questions are \emph{not} a weak spot (58.8\% against 47.5\% for
+plain questions); they are weak for direct scoring (35.3\%) and for translated input. The groups are small, so these
+figures are indicative, but they explain why translation did not help.
+
+\paragraph{Prompts for question types.} Two reasoning prompts were tested: \cond{cot\_en\_role\_negcheck} (``Before
+reasoning, state whether the question asks for the correct option or for the option that is NOT correct, does NOT
+match, or is false.'') and \cond{cot\_en\_role\_each\_option} (``Evaluate each of the four options one by one and say
+whether it is correct or incorrect for this question.''). On the subset, \cond{negcheck} scored 51.4\% (+2.5,
+95\% CI [$-$3.2, +8.2], $p$ = 0.48) and met the +2 rule, although its gain came from non-negated questions (52.5\% vs
+47.5\%) rather than negated ones (50.0\% vs 58.8\%). Judging each option hurt clearly: 38.9\% ($-$10.0, CI [$-$15.7,
+$-$4.3], $p$ = 0.001).
+
+\subsection{Second confirmation}
+\begin{table}[h]
+\centering\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrrc}
+\toprule
+Condition (confirmation set, $n$=1,483) & Acc. & Gain & $p$ & $p_\text{H}$ & Adopted\\
+\midrule
+reference: \cond{cot\_en\_role}, 512 tokens (submission 1) & 45.6 & -- & -- & -- & --\\
+\cond{cot\_en\_role}, 1,024 tokens & 45.6 & $\pm$0.0 & 1.00 & 1.00 & no (fallback)\\
+\cond{cot\_en\_role\_negcheck}, 1,024 tokens & 44.3 & $-$1.3 & 0.33 & 0.67 & no\\
+\bottomrule
+\end{tabular}
+\caption{Second confirmation. Rule: adopt a candidate if it beats the reference by $\ge$ 1 point with Holm-corrected
+$p<0.05$; otherwise use the 1,024-token version, which only removes cut-off answers.}
+\label{tab:confirm2}
+\end{table}
+
+The negation-check gain did not replicate. On Easy questions the 1,024-token limit gives the same accuracy as 512,
+since few Easy answers needed more; by the fallback rule it was used for submission 2 because it cannot truncate
+longer Medium and Hard reasoning.
+
+\subsection{Test predictions: submission 2}
+\cond{cot\_en\_role} with a 1,024-token limit was run on the 2,238 test questions in 4,282\,s (longest input 1,371
+tokens). The model now states an answer in \textbf{99.1\%} of its reasoning texts (62.4\% for submission 1); mean label
+mass 0.998; format validated on the pod and locally. 140 of the 2,238 answers differ from submission 1; they are
+mostly questions whose reasoning was cut off at 512 tokens. No accuracy-related test statistic was computed.
 
 \begin{table}[h]
 \centering\small
@@ -577,14 +718,16 @@ question still receives a scored answer, and the mean label mass after the cue w
 \toprule
 Submission & Easy & Medium & Hard & Macro average\\
 \midrule
-1: \cond{cot\_en\_role} & \todo{--} & \todo{--} & \todo{--} & \todo{--}\\
+1: \cond{cot\_en\_role}, 512 tokens & \todo{--} & \todo{--} & \todo{--} & \todo{--}\\
+2: \cond{cot\_en\_role}, 1,024 tokens & \todo{--} & \todo{--} & \todo{--} & \todo{--}\\
 \bottomrule
 \end{tabular}
-\caption{Leaderboard results (to be filled in after the Codabench upload).}
+\caption{Leaderboard results (to be filled in after the Codabench uploads).}
 \end{table}
 
 %=====================================================================================================================
 \section{Final system}\label{sec:system}
+The current final system is submission 2; submission 1 differs only in the reasoning limit (512 tokens).
 \begin{itemize}
 \item \textbf{Model}: \texttt{google/gemma-3-4b-it}, revision \texttt{093f9f38\ldots}, bfloat16, 4,300,079,472
 parameters (only component; 8B limit respected).
@@ -602,8 +745,9 @@ Question: {Sinhala question}
 ...
 4. {option 4}
 \end{Verbatim}
-\item \textbf{Decoding}: greedy, at most 512 new tokens; the stated answer (if any) is cut, ``\textbackslash n\textbackslash n
-Answer:\textvisiblespace'' appended, and the argmax over the digit tokens 1--4 is the prediction.
+\item \textbf{Decoding}: greedy, at most 1,024 new tokens (submission 2; 512 in submission 1); the stated answer (if
+any) is cut, ``\textbackslash n\textbackslash n Answer:\textvisiblespace'' appended, and the argmax over the digit
+tokens 1--4 is the prediction.
 \item \textbf{No} retrieval, no fine-tuning, no external data, no closed API, no test-time adaptation.
 \end{itemize}
 
@@ -651,9 +795,10 @@ over 8B & count from the safetensors headers (Section~\ref{sec:params})\\
 (prompt registry), \texttt{scoring} (averaging, calibration), \texttt{model} (loading, label/cloze scoring, generation),
 \texttt{evaluate} (runs conditions), \texttt{translate}, \texttt{ensemble}, \texttt{rationales}, \texttt{report}
 (paired statistics), \texttt{select\_winner}, \texttt{predict\_winner}, \texttt{submit} (format validation),
-\texttt{build\_dev}, \texttt{dedup}, \texttt{tokens}, \texttt{debug}. 34 offline tests (including a fake bigram model
-that checks batched label and cloze scoring against an unbatched reference, and a simulated out-of-memory split) run
-without a GPU. Every experiment stores its configuration, model revision, parameter count, library versions, GPU and
+\texttt{build\_dev}, \texttt{dedup}, \texttt{tokens}, \texttt{debug}, and the analysis-only \texttt{negation} and
+\texttt{qtypes}. 36 offline tests (including a fake bigram model that checks batched label and cloze scoring against
+an unbatched reference, a simulated out-of-memory split, and a stub model for self-consistency) run without a GPU.
+The code is in git (branch \texttt{initial-setup}, commit \texttt{4a4aa89}). Every experiment stores its configuration, model revision, parameter count, library versions, GPU and
 git revision in \texttt{outputs/<experiment>/config.json}.
 
 \paragraph{Commands} (RunPod, after uploading the code and data):
@@ -661,46 +806,59 @@ git revision in \texttt{outputs/<experiment>/config.json}.
 export HF_TOKEN=...                      # read token; Gemma licence accepted
 bash runpod/setup.sh                     # GPU check, pinned libraries, dev files, tests, model downloads
 bash runpod/run_subset.sh smoke          # then wave1, wave2, wave3, combos, confirm
-bash runpod/select_and_test.sh           # selection rule -> winner on the 2,238 test questions
+bash runpod/select_and_test.sh           # selection rule -> submission 1
+bash runpod/run_subset.sh cheap          # then translation, qtypes (follow-up screening)
+bash runpod/confirm2.sh                  # second confirmation + selection -> submission 2
 # or directly, the final system only:
 python -m sinmmlu.evaluate --model configs/models/gemma3_4b_it.yaml --data test \
-       --prompt cot_en_role --chat on
+       --prompt cot_en_role --chat on --max-new-tokens 1024
 \end{Verbatim}
 The submission is written to
 \begin{Verbatim}[fontsize=\small]
-outputs/gemma3_4b_it__none__cot_en_role__chaton__p1__c0__trnone__test/predictions.zip
+outputs/gemma3_4b_it__none__cot_en_role__chaton__p1__c0__trnone__mt1024__test/predictions.zip
 \end{Verbatim}
 Greedy decoding makes the run deterministic up to floating-point differences between GPUs.
 
-\paragraph{Cost.} All screening, combination, confirmation and test runs together took about 4.5 GPU-hours on one
-RTX~3090: a label-scored condition takes 5--42\,s for 280 questions (few-shot prompts are the slowest), a reasoning
-condition 6--9 minutes.
+\paragraph{Cost.} All runs together took about 10 GPU-hours on one RTX~3090: a label-scored condition takes 5--42\,s
+for 280 questions (few-shot prompts are the slowest), a reasoning condition 6--9 minutes for 280 questions and 31--47
+minutes for 1,483, and a test run 51 (512 tokens) to 71 minutes (1,024 tokens).
 
 %=====================================================================================================================
 \section{Limitations}\label{sec:limits}
 \begin{itemize}
 \item \textbf{All development data is Easy.} We have no labelled Medium or Hard questions, so the gains may not transfer
-to O/L and A/L questions, which are two thirds of the metric. The lower parse rate on the test set suggests longer
-reasoning is needed there.
+to O/L and A/L questions, which are two thirds of the metric. In particular we cannot measure whether the 140 answers
+that changed between submissions 1 and 2 (cut-off reasoning completed) are improvements; only the leaderboard shows it.
 \item \textbf{Single model, no training.} Fine-tuning (for example on Global-MMLU-si \cite{globalmmlu2025} and the
 public training data) was out of time; the paper rates the naturalness of Global-MMLU-si questions at 71/100
 against 97/100 for native questions, so such data would need care.
 \item \textbf{Screening noise.} With 280 questions, gains below about 7 points cannot be separated; two subset results
 did not replicate. Only the confirmation results should be quoted as findings.
 \item \textbf{Parameter-count error} at selection time (corrected; no effect on the decision).
-\item \textbf{Process note.} When the test-set predictions were checked, the counts of predicted answers (1--4) were
-printed once. Nothing was chosen from them, and no other test-set statistic was looked at.
+\item \textbf{Process notes.} When submission 1 was checked, the counts of predicted answers (1--4) on the test set
+were printed once; for submission 2, the number of answers that differ from submission 1 was counted. Neither uses
+labels, nothing was chosen from them, and no other test-set statistic was computed.
+\item \textbf{Lost raw outputs.} The rented pod was terminated on 25 October, which deleted its volume before the raw
+outputs of the follow-up experiments (Section~\ref{sec:followup}) had been copied. All numbers in this report were
+recorded in our lab notebook before that; the per-question predictions and reasoning texts of those runs, some
+per-type cells (Table~\ref{tab:qtypes}) and the translation caches would have to be regenerated (greedy decoding and
+fixed seeds make this possible). Raw outputs of the screening waves, combinations, the first confirmation and the
+submission-1 test run, and both submission files, are kept.
 \item \textbf{Licences.} NLLB (used only in screening) is CC-BY-NC~4.0; the final system uses only Gemma (Gemma
 terms of use).
 \end{itemize}
 
 \section{Next steps}
 \begin{enumerate}
-\item Longer reasoning budget (768 tokens) to raise the test parse rate, checked on the confirmation set first.
-\item Fine-tuning with LoRA on Global-MMLU-si (and the public training data, if the team agrees) with the answer-digit
-loss, judged by the same confirmation protocol.
-\item MADLAD translation combined with English reasoning (7.24B parameters, within the limit).
+\item Compare the leaderboard scores of submissions 1 and 2 (Medium/Hard effect of the longer reasoning limit).
+\item Fine-tuning with LoRA on Global-MMLU-si (and the public training data, if the team agrees), judged by the same
+confirmation protocol, with \textbf{negation-focused training data} (for example ``which is NOT \ldots'' questions
+and negated/non-negated question pairs) and a separate negation evaluation, since negation is the clearest failure
+mode of direct scoring and of translated input (Section~\ref{sec:negation}).
+\item The three-prompt reasoning ensemble (+1.1 on the confirmation set, not significant) if test-time compute allows.
 \end{enumerate}
+Explored and not pursued: self-consistency, translation pipelines with and without reasoning, option-by-option
+judgement, calibration, cloze scoring.
 
 %=====================================================================================================================
 \begin{thebibliography}{9}
@@ -716,6 +874,9 @@ In \emph{NeurIPS 2023 Datasets and Benchmarks}.
 \bibitem{globalmmlu2025} Shivalika Singh et al. 2025. Global MMLU: Understanding and Addressing Cultural and Linguistic
 Biases in Multilingual Evaluation. In \emph{Proceedings of ACL 2025}.
 \bibitem{gemma3} Gemma Team. 2025. Gemma 3 Technical Report. \emph{arXiv:2503.19786}.
+\bibitem{wang2023} Xuezhi Wang, Jason Wei, Dale Schuurmans, Quoc Le, Ed Chi, Sharan Narang, Aakanksha Chowdhery, and
+Denny Zhou. 2023. Self-Consistency Improves Chain of Thought Reasoning in Language Models. In \emph{Proceedings of
+ICLR 2023}.
 \end{thebibliography}
 
 %=====================================================================================================================
@@ -804,7 +965,9 @@ Gemma-3-4B-pt (base model) & 46.4 & 35.7 & 11.8 & 6.1\\
 Colab T4, three scoring bugs found by review.
 \item 24 Oct: code rebuilt as the \texttt{sinmmlu} package; base model fixed to Gemma-3-4B-it; screening subset built;
 RunPod RTX~3090 set up; smoke test (pre-fill bug found and fixed); waves 1--3; combinations; confirmation;
-first test predictions.
+submission 1; parameter-count correction; code committed (\texttt{f11ed8e}); reasoning length, self-consistency and
+ensemble; translation with reasoning; negation and question-type analysis; second confirmation; submission 2.
+\item 25 Oct: code committed (\texttt{4a4aa89}); pod terminated (follow-up raw outputs lost, numbers kept).
 \item 27 Oct: leaderboard closes. 28 Oct: code. 30 Oct: report and slides.
 \end{itemize}
 
