@@ -1,6 +1,6 @@
 # Running on RunPod (RTX 3090, 24 GB; an A40 works too)
 
-Pod: PyTorch template (CUDA 12.x, torch ≥ 2.6), RTX 3090 (Ampere: bf16 works), code and results on the `/workspace` volume; the model cache (~34 GB) on the container disk at `/root/hf_cache` (re-downloaded after a pod stop).
+Pod: PyTorch template (CUDA 12.x, torch ≥ 2.6), RTX 3090 (Ampere: bf16 works), code, results and the model cache (`/workspace/hf_cache`, ~8.6 GB for the final system) on the `/workspace` volume, which survives a pod Stop (not Terminate). Run `bash runpod/speedtest.sh` first: a good pod downloads Python packages at >= 5 MB/s and from Hugging Face at >= 50 MB/s.
 Before starting: accept the Gemma licence on huggingface.co (gemma-3-4b-it, gemma-3-4b-pt, gemma-3-1b-it) with the
 account whose token you use.
 

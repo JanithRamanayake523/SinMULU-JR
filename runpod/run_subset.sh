@@ -9,7 +9,7 @@
 # Log: logs/<wave>_<time>.log; failed steps are listed in logs/failed.txt and do not stop the wave.
 set -uo pipefail
 cd "$(dirname "$0")/.."
-export HF_HOME=/root/hf_cache PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false
+export HF_HOME="${SINMULU_HF_HOME:-/workspace/hf_cache}" PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false
 WAVE="${1:?usage: run_subset.sh smoke|wave1|wave2|wave3|combos|confirm|cheap|translation|qtypes|report}"
 mkdir -p logs
 exec > >(tee -a "logs/${WAVE}_$(date +%Y%m%d_%H%M).log") 2>&1

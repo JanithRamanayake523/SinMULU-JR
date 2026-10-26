@@ -4,7 +4,7 @@
 #   bash runpod/select_and_test.sh
 set -uo pipefail
 cd "$(dirname "$0")/.."
-export HF_HOME=/root/hf_cache PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false
+export HF_HOME="${SINMULU_HF_HOME:-/workspace/hf_cache}" PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false
 mkdir -p logs
 exec > >(tee -a "logs/test_$(date +%Y%m%d_%H%M).log") 2>&1
 P=gemma3_4b_it__none__

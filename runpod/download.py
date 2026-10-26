@@ -1,6 +1,7 @@
 """Download the models of the given waves into $HF_HOME (fail fast on gated models before a long run).
 
-  python runpod/download.py wave1 wave2 wave3
+  python runpod/download.py final                # the submitted system: gemma-3-4b-it only
+  python runpod/download.py wave1 wave2 wave3    # all models of the screening study
 Needs HF_TOKEN in the environment (read by huggingface_hub; never written to disk by this script) and the Gemma
 licence accepted on huggingface.co for that account.
 """
@@ -9,6 +10,7 @@ import sys
 from huggingface_hub import snapshot_download
 
 WAVES = {
+    "final": ["google/gemma-3-4b-it"],  # the submitted system needs only this model
     "wave1": ["google/gemma-3-4b-it", "google/gemma-3-4b-pt", "google/gemma-3-1b-it"],
     "wave2": ["facebook/nllb-200-distilled-600M"],
     "wave3": ["google/madlad400-3b-mt"],

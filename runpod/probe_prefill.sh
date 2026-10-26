@@ -3,7 +3,7 @@
 # prompt families (dev data only). Usage: bash runpod/probe_prefill.sh [N]
 set -uo pipefail
 cd "$(dirname "$0")/.."
-export HF_HOME=/root/hf_cache
+export HF_HOME="${SINMULU_HF_HOME:-/workspace/hf_cache}"
 N="${1:-40}"
 M=configs/models/gemma3_4b_it.yaml
 D=dev/inference_subset.jsonl
