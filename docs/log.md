@@ -1,5 +1,34 @@
 # Lab notebook (newest first)
 
+## 2026-10-26: last two ideas on the subset (reference cot_en_role at 1,024 tokens: 48.9%)
+- Option-order averaging with reasoning (cot_en_role, 1,024 tokens, 2 cyclic orders averaged): **49.6% (+0.7, CI
+  [-3.9, +5.4], p 0.88)**; majority vote 49.6%. Negation 55.9%, blank 56.3%.
+- Ensemble of cot_en + cot_en_role + cot_en_fewshot2, all at 1,024 tokens: **50.7% (+1.8, CI [-2.9, +6.4], p 0.54)**.
+  Parts at 1,024: cot_en 47.9%, cot_en_fewshot2 50.7% (same as at 512 on the subset).
+- Neither reaches the pre-stated +2 points; with the earlier confirmation-set result for the 512-token ensemble
+  (+1.1, p 0.31), no further confirmation is run. **Submission 2 stays the final system.**
+
+## 2026-10-26: negation-consistency chain on the subset (user's idea)
+cot_en_role_negchain: 3 turns on top of cot_en_role (1) list ALL correct options (1,024 tokens), (2) write the opposite
+question and list its options (1,024), (3) choose the single answer to the original question (256), scored after
+"Answer: ". Reference cot_en_role at 1,024 tokens rerun on this pod: 48.9% (identical to 24 Oct).
+Result: **47.5% (-1.4, 95% CI [-7.9, +5.0], p 0.74)**: below the +2 rule, not confirmed. 1,236 s (3.3x the
+reference). Step 1 listed on average 2.0 "correct" options and step 2 2.7 options for the opposite question (lists
+found in 100%); final answer stated in 98.6%. By type: negation 47.1% (reference 58.8%), blank 43.8% (62.5%),
+numeric 46.7% (43.3%), plain 48.0% (47.5%): the chain hurts exactly on negated and blank questions.
+
+## 2026-10-26: rerun on a new pod (code ae9abe5) after the terminated pod lost its outputs
+- Pod: RTX 3090, slow network (Python packages ~1.2 MB/s, Hugging Face ~7 MB/s with parallel connections), no
+  separate volume. runpodctl transfers of a 4.7 MB archive arrived corrupted twice (same size, damaged middle);
+  1 MB parts with MD5 checks worked. Gemma-3-4B-it cached in /workspace/hf_cache.
+- **Reproduction of submission 2 from a clean setup: 2,238/2,238 test answers identical** to
+  submissions/2026-10-24_cot_en_role_mt1024/predictions.jsonl (parse rate 99.1%, label mass 0.998).
+- inference_rest: A0 38.17%, cot_en_role at 1024 tokens 45.58% (both identical to the earlier runs).
+  By question type (rest: negation 157, sub-option 22, blank 104, numeric 119, plain 1,123): A0 37.6 / 27.3 / 28.8 /
+  35.3 / 39.2; cot_en_role 1024 50.3 / 31.8 / 35.6 / 37.0 / 46.3. Negated questions gain most from English reasoning
+  (+12.7); sub-option, blank and numeric questions remain weak.
+- Results copied to runpod_results_1026/ (results, logs, outputs incl. the test reasoning texts), MD5-verified.
+
 ## 2026-10-25: pod terminated
 The RunPod pod was terminated (not stopped), which deleted its /workspace volume. Kept: code (git 4a4aa89),
 submissions 1 and 2 (submissions/), all summary numbers (this notebook), and raw outputs up to the first confirmation

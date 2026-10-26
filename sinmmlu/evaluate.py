@@ -31,7 +31,7 @@ import re
 import yaml
 
 from . import prompts as P
-from .data import LEVELS, ROOT, load_jsonl, load_rows, norm_model, path
+from .data import LEVELS, ROOT, cyclic_perms, load_jsonl, load_rows, norm_model, path, permute_options
 from .metrics import wilson_halfwidth
 from .scoring import argmax1, score_rows, softmax
 
@@ -81,9 +81,13 @@ def check_condition(c, mcfg):
     p = P.PROMPTS[c["prompt"]]
     if c["chat"] == "on" and not mcfg["chat_capable"]:
         raise SystemExit(f"{mcfg['model']} is not chat capable")
-    if p.method in ("cloze", "cot") and (c["perms"] != 1 or c["calibrate"]):
-        raise SystemExit(f"{c['prompt']}: perms/calibration only apply to digit scoring")
-    if p.method == "cot" and c["chat"] != "on":
+    if p.method in ("cloze", "cot", "chain") and c["calibrate"]:
+        raise SystemExit(f"{c['prompt']}: calibration only applies to digit scoring")
+    if p.method in ("cloze", "chain") and c["perms"] != 1:
+        raise SystemExit(f"{c['prompt']}: option-order averaging applies to digit scoring and reasoning prompts only")
+    if p.method == "cot" and c["perms"] > 1 and c.get("samples", 1) > 1:
+        raise SystemExit("option-order averaging and self-consistency are not combined")
+    if p.method in ("cot", "chain") and c["chat"] != "on":
         raise SystemExit(f"{c['prompt']}: reasoning prompts need the chat template")
     if (p.lang == "si") != (c["translator"] == "none"):
         raise SystemExit(f"{c['prompt']} (lang={p.lang}) with translator={c['translator']}: "
@@ -122,46 +126,106 @@ def generate_cached(lm, rows, texts, gen_file, max_new, sample_seed=None, temper
 
 
 def run_cot(lm, rows, prompt, out_dir, cond=None, seed=42):
-    """Greedy reasoning, or self-consistency (cond samples=k > 1): k sampled reasoning texts per question
-    (temperature cond temperature, top-p 0.95, seeds seed+1000*i), each scored after the cue; the k label
-    distributions are averaged (soft vote). stats also report the hard majority vote of the stated answers."""
+    """Greedy reasoning, or one of two kinds of repeated reasoning whose scored label distributions are averaged:
+      self-consistency (cond samples=k > 1): k sampled reasoning texts per question (temperature cond temperature,
+          top-p 0.95, seeds seed+1000*i);
+      option-order averaging (cond perms=m > 1): greedy reasoning under the first m cyclic option orders, each
+          mapped back to the original options (as for digit scoring).
+    stats also report the hard majority vote of the stated answers (in original option numbers)."""
     cond = cond or {}
     p = P.PROMPTS[prompt]
     max_new = cond.get("max_new_tokens") or p.max_new_tokens
-    k = cond.get("samples", 1)
-    texts = [lm.render(P.build(r, prompt)) for r in rows]
+    k, m = cond.get("samples", 1), cond.get("perms", 1)
+    assert k == 1 or m == 1, "self-consistency and option-order averaging are not combined"
+    orders = cyclic_perms(4)[:m]
+    n = k * m
     probs = [[0.0] * 4 for _ in rows]
     parsed_all, masses, agree, n_parsed = [], [], 0, 0
-    for s in range(k):
-        if k == 1:
+    for s in range(n):
+        perm = orders[s] if m > 1 else orders[0]
+        view = [permute_options(r, perm) for r in rows] if m > 1 else rows
+        texts = [lm.render(P.build(r, prompt)) for r in view]
+        if n == 1:
             gens = generate_cached(lm, rows, texts, out_dir / "generations.jsonl", max_new)
+        elif m > 1:
+            gens = generate_cached(lm, rows, texts, out_dir / f"generations_o{s}.jsonl", max_new)
         else:
             gens = generate_cached(lm, rows, texts, out_dir / f"generations_s{s}.jsonl", max_new,
                                    sample_seed=seed + 1000 * s, temperature=cond.get("temperature", 0.7))
         scored, parsed = [], []
         for t, g in zip(texts, gens):
             ans, start = parse_answer(g)
-            parsed.append(ans)
+            parsed.append(perm[ans - 1] + 1 if ans is not None else None)  # back to the original option number
             reasoning = g[:start] if start is not None else g  # cut the stated answer; the cue asks for it again
             scored.append(t + reasoning.rstrip() + p.cue)
         lps = lm.label_logprobs_text(scored, p.labels)
         for i, lp in enumerate(lps):
-            q = softmax(lp)
-            probs[i] = [a + b / k for a, b in zip(probs[i], q)]
+            q_view = softmax(lp)
+            q = [0.0] * 4
+            for pos, v in enumerate(q_view):
+                q[perm[pos]] = v
+            probs[i] = [a + b / n for a, b in zip(probs[i], q)]
             masses.append(sum(math.exp(x) for x in lp))
             if parsed[i] is not None:
                 n_parsed += 1
                 agree += parsed[i] == argmax1(q)
         parsed_all.append(parsed)
-    stats = {"parse_rate": n_parsed / (len(rows) * k), "parsed_agrees_with_scored": agree / max(n_parsed, 1),
+    stats = {"parse_rate": n_parsed / (len(rows) * n), "parsed_agrees_with_scored": agree / max(n_parsed, 1),
              "label_mass_mean": sum(masses) / len(masses), "label_mass_min": min(masses),
-             "max_new_tokens": max_new, "samples": k}
+             "max_new_tokens": max_new, "samples": k, "orders": m}
+    k = n  # majority vote over all passes
     if k > 1:
         votes = []
         for i in range(len(rows)):
             c = collections.Counter(a for a in (pa[i] for pa in parsed_all) if a is not None)
             votes.append(max(c, key=lambda a: (c[a], probs[i][a - 1])) if c else argmax1(probs[i]))
         stats["majority_vote_preds"] = votes
+    return probs, stats
+
+
+LIST_RE = re.compile(r"(?:Correct options|Options for the opposite question)\s*[:：]\s*\**\s*([0-9 ,and&]*)",
+                     re.IGNORECASE)
+
+
+def run_chain(lm, rows, prompt, out_dir):
+    """Multi-turn reasoning: the prompt's first user turn, then each follow-up user turn, the model answering every
+    turn greedily (replies cached per step in generations_step<i>.jsonl); the final answer is scored after the cue as
+    in run_cot. stats also report how many options the model listed in the first two steps."""
+    p = P.PROMPTS[prompt]
+    turns = [list(P.build(r, prompt)) for r in rows]
+    steps = [(None, p.max_new_tokens)] + list(p.followups)
+    replies = []
+    for i, (text, max_new) in enumerate(steps):
+        if text is not None:
+            for t in turns:
+                t.append(("user", text))
+        gens = generate_cached(lm, rows, [lm.render(tuple(t)) for t in turns], out_dir / f"generations_step{i}.jsonl",
+                               max_new)
+        replies.append(gens)
+        if i < len(steps) - 1:
+            for t, g in zip(turns, gens):
+                t.append(("assistant", g))
+    scored, parsed = [], []
+    for t, g in zip(turns, replies[-1]):
+        ans, start = parse_answer(g)
+        parsed.append(ans)
+        scored.append(lm.render(tuple(t)) + (g[:start] if start is not None else g).rstrip() + p.cue)
+    lps = lm.label_logprobs_text(scored, p.labels)
+    probs = [softmax(lp) for lp in lps]
+    preds = [argmax1(q) for q in probs]
+    n_parsed = sum(a is not None for a in parsed)
+    stats = {"parse_rate": n_parsed / len(rows),
+             "parsed_agrees_with_scored": sum(a == y for a, y in zip(parsed, preds) if a is not None) / max(n_parsed, 1),
+             "label_mass_mean": sum(sum(math.exp(x) for x in lp) for lp in lps) / len(lps),
+             "label_mass_min": min(sum(math.exp(x) for x in lp) for lp in lps)}
+    for i, gens in enumerate(replies[:-1]):
+        counts = []
+        for g in gens:
+            m = list(LIST_RE.finditer(g))
+            counts.append(len(set(re.findall(r"[1-4]", m[-1].group(1)))) if m else None)
+        found = [c for c in counts if c is not None]
+        stats[f"step{i}_list_found"] = len(found) / len(gens)
+        stats[f"step{i}_mean_options_listed"] = sum(found) / max(len(found), 1)
     return probs, stats
 
 
@@ -264,6 +328,8 @@ def run_condition(model, tok, minfo, mcfg, cond, rows, data, limit, env, force=F
         probs, stats = score_rows(rows, lm, cond["prompt"], cond["perms"], cond["calibrate"])
     elif p.method == "cloze":
         probs, stats = run_cloze(lm, rows, cond["prompt"])
+    elif p.method == "chain":
+        probs, stats = run_chain(lm, rows, cond["prompt"], out)
     else:
         probs, stats = run_cot(lm, rows, cond["prompt"], out, cond, mcfg["seed"])
     stats.update(max_len=lm.max_len, seconds=round(time.time() - t0, 1))

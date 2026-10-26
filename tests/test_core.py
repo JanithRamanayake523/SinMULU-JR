@@ -129,7 +129,7 @@ def test_exp_ids_unique_and_conditions_checked():
                                        "translator": "none", **kw}, MCFG)
     ok()
     ok(prompt="en_nosubject", translator="nllb")
-    for bad in (dict(prompt="en_nosubject"), dict(translator="nllb"), dict(prompt="cot_si", perms=4),
+    for bad in (dict(prompt="en_nosubject"), dict(translator="nllb"), dict(prompt="cot_si", calibrate=True), dict(prompt="cloze_nosubject", perms=4),
                 dict(prompt="cot_si", chat="off"), dict(prompt="cloze_nosubject", calibrate=True)):
         with pytest.raises(SystemExit):
             ok(**bad)
@@ -222,7 +222,7 @@ def test_every_prompt_marker_matches_its_answer_word():
     for name, p in P.PROMPTS.items():
         if p.method == "digits":
             assert P.build(r, name)[-1][1].endswith(p.answer_word + ":"), name
-        if p.method == "cot":
+        if p.method in ("cot", "chain"):
             assert p.cue.endswith(": ") and p.answer_word in p.cue, name
 
 
@@ -322,3 +322,57 @@ def test_self_consistency_soft_and_majority_vote(tmp_path):
     assert sorted(f.name for f in tmp_path.glob("generations_s*.jsonl")) == [f"generations_s{i}.jsonl" for i in range(3)]
     run_cot(lm, rows, "cot_en", tmp_path, {"samples": 3, "temperature": 0.7, "max_new_tokens": 99})
     assert len(lm.calls) == 3  # second run reuses the cached reasoning
+
+
+def test_negation_chain_turns_limits_and_cache(tmp_path):
+    from sinmmlu.evaluate import run_chain
+    rows = [dict(r) for r in ROWS[:2]]
+
+    class StubLM:
+        def __init__(self):
+            self.calls = []
+
+        def render(self, turns):
+            return " || ".join(f"{role}:{text[:12]}" for role, text in turns)
+
+        def generate(self, texts, max_new, rendered=False, sample_seed=None, temperature=0.7):
+            self.calls.append((max_new, texts[0].count("user:")))
+            step = len(self.calls) - 1
+            replies = ["... Correct options: 2, 3", "... Options for the opposite question: 1, 4", "short.\nAnswer: 3"]
+            return [replies[step] for _ in texts]
+
+        def label_logprobs_text(self, texts, labels):
+            assert all(t.endswith("\n\nAnswer: ") and "user:Now use both" in t for t in texts)
+            return [[-5.0, -5.0, 0.0, -5.0] for _ in texts]
+
+    lm = StubLM()
+    probs, stats = run_chain(lm, rows, "cot_en_role_negchain", tmp_path)
+    assert lm.calls == [(1024, 1), (1024, 2), (256, 3)]  # limits per step; one more user turn each step
+    assert all(argmax1(p) == 3 for p in probs) and stats["parse_rate"] == 1.0
+    assert stats["step0_mean_options_listed"] == 2 and stats["step1_mean_options_listed"] == 2
+    run_chain(lm, rows, "cot_en_role_negchain", tmp_path)
+    assert len(lm.calls) == 3  # all three steps reused from the cache
+
+
+def test_reasoning_option_order_averaging_maps_back():
+    from sinmmlu.evaluate import run_cot
+    import tempfile, pathlib
+    rows = [dict(r, answer=2) for r in ROWS[:3]]
+    gold_text = {id(r): norm_model(r["choices"][1]) for r in rows}
+
+    class StubLM:  # always picks the position that currently shows the gold option text
+        def render(self, turns):
+            return turns[-1][1]
+
+        def generate(self, texts, max_new, rendered=False, sample_seed=None, temperature=0.7):
+            return ["reasoning" for _ in texts]
+
+        def label_logprobs_text(self, texts, labels):
+            out = []
+            for t in texts:
+                pos = next(i for i in range(4) if any(f"\n{i + 1}. {g}" in t for g in gold_text.values()))
+                out.append([0.0 if j == pos else -5.0 for j in range(4)])
+            return out
+
+    probs, stats = run_cot(StubLM(), rows, "cot_en", pathlib.Path(tempfile.mkdtemp()), {"perms": 2})
+    assert all(argmax1(p) == 2 for p in probs) and stats["orders"] == 2

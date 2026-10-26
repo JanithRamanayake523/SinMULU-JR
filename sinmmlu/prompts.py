@@ -53,6 +53,19 @@ EN_NEG_CHECK = ("Before reasoning, state whether the question asks for the corre
 EN_EACH_OPTION = ("Evaluate each of the four options one by one and say whether it is correct or incorrect for this "
                   "question, thinking in English. Then choose the correct or most suitable answer from the options "
                   "1, 2, 3, 4.\nEnd your reply with \"Answer: <number>\".\n")
+# negation-consistency chain (2026-10-26): all correct options -> opposite question -> one final answer
+EN_ALL_CORRECT = ("Think step by step in English. For each of the options 1, 2, 3, 4, decide whether it is a correct "
+                  "answer to this question. More than one option may be correct.\n"
+                  "End your reply with \"Correct options: <numbers separated by commas>\".\n")
+EN_NEGATED_STEP = ("Now negate the question: write the opposite question in English (if the question asks which option "
+                   "is correct, the opposite question asks which options are NOT correct, and if it asks which option is "
+                   "NOT correct, the opposite question asks which options are correct). Then think step by step in "
+                   "English and decide for each of the options 1, 2, 3, 4 whether it answers the opposite question.\n"
+                   "End your reply with \"Options for the opposite question: <numbers separated by commas>\".")
+EN_FINAL_STEP = ("Now use both analyses, the original question with its correct options and the opposite question with "
+                 "its options, to choose the single correct or most suitable answer to the ORIGINAL question from the "
+                 "options 1, 2, 3, 4. Explain briefly in English (at most three sentences), then end your reply with "
+                 "\"Answer: <number>\".")
 EN_TRANSLATE_FIRST = ("First translate the question and the four options into English. Then think step by step in "
                       "English and choose the correct or most suitable answer from the options 1, 2, 3, 4.\n"
                       "End your reply with \"Answer: <number>\".\n")
@@ -87,6 +100,7 @@ class Prompt:
     answer_word: str = SI_A                          # pre-filled answer marker: the reply starts "<answer_word>: "
     cue: str = ""                                    # cot: text appended after the reasoning, before scoring
     max_new_tokens: int = 0                          # cot: reasoning length limit
+    followups: tuple = ()                            # chain: further user turns, each (text, max_new_tokens)
     pool: str = FEWSHOT_POOL                         # where k-shot examples come from
     example_reply: Optional[Callable[[dict], str]] = None  # assistant turn of an example (default: its answer label)
 
@@ -159,6 +173,11 @@ PROMPTS = {
         lambda r: EN_ROLE.format(subject=subject_en(r)) + EN_HEAD_SI_SUBJECT.format(subject=subject_en(r))
         + EN_EACH_OPTION + f"\nQuestion: {q_si(r)}\n{options(r['choices'])}",
         subject=subject_en, **COT_EN),
+    "cot_en_role_negchain": Prompt(
+        lambda r: EN_ROLE.format(subject=subject_en(r)) + EN_HEAD_SI_SUBJECT.format(subject=subject_en(r))
+        + EN_ALL_CORRECT + f"\nQuestion: {q_si(r)}\n{options(r['choices'])}",
+        subject=subject_en, method="chain", followups=((EN_NEGATED_STEP, 1024), (EN_FINAL_STEP, 256)),
+        cue="\n\nAnswer: ", answer_word="Answer", max_new_tokens=1024),
     "cot_en_role_translate_first": Prompt(
         lambda r: EN_ROLE.format(subject=subject_en(r)) + EN_HEAD_SI_SUBJECT.format(subject=subject_en(r))
         + EN_TRANSLATE_FIRST + f"\nQuestion: {q_si(r)}\n{options(r['choices'])}",

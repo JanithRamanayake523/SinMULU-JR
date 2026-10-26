@@ -18,7 +18,7 @@ logs/
 .hf_token
 
 # raw results copied from the pod (dev predictions and generations)
-runpod_results/
+runpod_results*/
 submissions/
 report/*.log
 report/*.aux
