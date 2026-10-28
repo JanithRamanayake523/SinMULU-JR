@@ -1,5 +1,31 @@
 # Lab notebook (newest first)
 
+## 2026-10-28: final system and final submission
+- Qwen3.5-4B LoRA (rank 16, 1 epoch, 807 steps) on Global-MMLU si + sinmulu_si combined (25,799 train / 2,745 val after
+  dropping questions > 1,024 tokens): validation accuracy 44.4% -> 54.8%, still rising slowly at the end; 8.8 h on an
+  RTX 3090 (12,288-token micro-batches). Adapter: lora_adapters/qwen3.5-4b_lora_combined-si_epoch1 (md5 6d42bd99...).
+- Test predictions of the merged model with cot_en_role (1,024 tokens, thinking off): stated-answer rate 77.7%.
+- **Final system:** the same model with cot_en_role_think (thinking mode on, 4,096 tokens), A100 40 GB, generation batch 48,
+  ~5 h for 2,238 questions; stated-answer rate 56.0% (the rest hit the limit and are scored after the cue), label mass
+  0.999, longest input 4,865 tokens. File: submissions/2026-10-28_qwen35-4b_lora-combined-si_cot_en_role_think_mt4096/.
+- Final code package uploaded to SinhalaMMLU-SharedTask/team-sinbotics (inference.py = self-contained copy of the
+  cot_en_role_think path; same prompts for all 2,238 test questions and same answer handling on all 2,238 reasoning
+  texts as the package). Mirror without weights: final_submission/team-sinbotics/.
+- Disclosed in the submission: sinmulu_si was transcribed from exam-paper page images with Claude Sonnet 5.5, some answers
+  model-derived; 165 questions overlapping the test set were removed by manual review before training.
+- Pods: three hosts had a GPU that refused every CUDA call; runpodctl corrupted 10 MB parts (5 MB parts worked).
+
+## 2026-10-27: Global-MMLU / sinmulu_si LoRA on Gemma-3-4B-it, switch to Qwen3.5-4B
+- Training data: Global-MMLU si (python -m sinmmlu.gmmlu) and sinmulu_si (python -m sinmmlu.sinmulu), 10% validation per
+  subject; combined set (python -m sinmmlu.combined): 26,675 / 2,829.
+- Gemma-3-4B-it LoRA, validation accuracy (digit prompt): Global-MMLU 40.1 -> 41.5; sinmulu_si rank 16 epoch 1 / 2 / 3:
+  47.1 / 47.3 / 45.8 (overfitting after epoch 1); rank 8 with 10% validation epoch 1 / 2: 43.8 / 44.4. With
+  cot_en_role on the 280-question screening set: base 47.1, sinmulu_si epoch 1 46.8, epoch 2 51.4.
+- Base model switched to Qwen/Qwen3.5-4B (rev 851bf6e8, 2026-02-27, Apache-2.0; hybrid Gated DeltaNet + full attention;
+  needs flash-linear-attention 0.4.0, causal-conv1d 1.7.0; Sinhala ~4.8 tokens per word). LoRA targets extended to
+  model.layers.N.* and the linear-attention projections (200 modules).
+- A subject-aware variant of the prompt (subject hints + NOT rule) lowered the stated-answer rate to 41.9% and was dropped.
+
 ## 2026-10-26: last two ideas on the subset (reference cot_en_role at 1,024 tokens: 48.9%)
 - Option-order averaging with reasoning (cot_en_role, 1,024 tokens, 2 cyclic orders averaged): **49.6% (+0.7, CI
   [-3.9, +5.4], p 0.88)**; majority vote 49.6%. Negation 55.9%, blank 56.3%.

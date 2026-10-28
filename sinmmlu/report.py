@@ -1,9 +1,9 @@
 """Compare finished dev experiments on the same questions (from outputs/*/preds.jsonl; no model needed).
 
-  python -m sinmmlu.report --data dev/easy_full.jsonl --baseline <exp_id>
+  python -m sinmmlu.report --data dev/archive/easy_full.jsonl --baseline <exp_id>
       table: accuracy, 95% CI, gain over the baseline, paired bootstrap 95% CI of the gain, exact McNemar p,
       Holm-adjusted p (over all compared experiments)
-  python -m sinmmlu.report --data dev/easy_full.jsonl --by-subject results/subject_accuracy.csv
+  python -m sinmmlu.report --data dev/archive/easy_full.jsonl --by-subject results/subject_accuracy.csv
       accuracy per subject (one row per subject file) for every experiment; descriptive only
 """
 import argparse

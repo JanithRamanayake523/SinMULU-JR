@@ -49,7 +49,7 @@ def plot(results, out):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--models", nargs="+", required=True)
-    ap.add_argument("--data", default="dev/easy_full.jsonl")
+    ap.add_argument("--data", default="dev/archive/easy_full.jsonl")
     ap.add_argument("--prompt", default="paper_nosubject", choices=sorted(P.PROMPTS))
     ap.add_argument("--plot")
     a = ap.parse_args()

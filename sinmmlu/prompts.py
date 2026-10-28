@@ -19,8 +19,8 @@ from .data import load_jsonl, norm_model, path, subject_en, subject_family, subj
 
 DIGITS = ("1", "2", "3", "4")
 LETTERS = ("A", "B", "C", "D")
-FEWSHOT_POOL = "dev/fewshot_pool.jsonl"
-RATIONALE_POOL = "dev/fewshot_cot_en.jsonl"  # pool questions with a correct, model-written English rationale
+FEWSHOT_POOL = "dev/archive/fewshot_pool.jsonl"
+RATIONALE_POOL = "dev/archive/fewshot_cot_en.jsonl"  # pool questions with a correct, model-written English rationale
 
 # Appendix B of Pramodya et al. (2025)
 SI_HEAD_SUBJECT = "පහත දැක්වෙන්නේ {subject} සම්බන්ධ බහුවරණ ප්‍රශ්නයකි.\n"
@@ -73,6 +73,28 @@ EN_BILINGUAL = ("The following is a multiple choice question in Sinhala, followe
                 "The translation may contain errors; the Sinhala text is the original.\n")
 
 
+# subject-aware hints (2026-10-27), checked in this order (e.g. "Political Science" is social, "Home Economics" science)
+SUBJECT_HINTS = (
+    (("sinhala",), "This question tests Sinhala language and literature (grammar, vocabulary, idioms, literary works). "
+                   "Pay close attention to the exact Sinhala wording and spelling of each option.\n"),
+    (("buddh", "catholic", "christian", "islam"),
+     "Answer according to the teachings of this religion as taught in the Sri Lankan school curriculum.\n"),
+    (("histor", "geograph", "civic", "politic", "communication", "health"),
+     "Use knowledge of Sri Lanka (history, geography, government and society) as taught in the Sri Lankan school "
+     "curriculum.\n"),
+    (("science", "biolog", "chemist", "physic", "agricult", "biosystem", "design", "home econ", "technolog"),
+     "Reason step by step and check facts, units and calculations carefully.\n"),
+    (("business", "econom"), "Apply the definitions and principles of the Sri Lankan syllabus and check any calculation.\n"),
+    (("art", "danc", "drama", "music"), "Recall the specific traditional Sri Lankan terms, artists, forms and techniques.\n"),
+)
+EN_NOT_RULE = "If the question asks which option is NOT correct (or does not match), choose the false option.\n"
+
+
+def subject_hint(r):
+    s = subject_en(r).lower()
+    return next((hint for keys, hint in SUBJECT_HINTS if any(k in s for k in keys)), "")
+
+
 def options(choices, labels=DIGITS):
     return "\n".join(f"{l}. {norm_model(c)}" for l, c in zip(labels, choices))
 
@@ -103,6 +125,7 @@ class Prompt:
     followups: tuple = ()                            # chain: further user turns, each (text, max_new_tokens)
     pool: str = FEWSHOT_POOL                         # where k-shot examples come from
     example_reply: Optional[Callable[[dict], str]] = None  # assistant turn of an example (default: its answer label)
+    thinking: bool = False                           # cot: the model's own thinking mode (Qwen3.5), not just a prompt
 
 
 def _paper(r):
@@ -141,7 +164,7 @@ PROMPTS = {
                                  answer_word="Answer"),
     "letters_nosubject": Prompt(lambda r: SI_HEAD + SI_INSTR_LETTERS + body(q_si(r), options(r["choices"], LETTERS)),
                                 labels=LETTERS),
-    # few-shot (B7): k fixed solved examples of the same subject from dev/fewshot_pool.jsonl
+    # few-shot (B7): k fixed solved examples of the same subject from dev/archive/fewshot_pool.jsonl
     **{f"fewshot{k}_nosubject": Prompt(_paper, shots=k) for k in (1, 3, 5)},
     "fewshot3_subject_si": Prompt(_paper_subject_si, subject=subject_si, shots=3),
     # scoring alternatives (C4) and reasoning (C6, C7)
@@ -153,6 +176,14 @@ PROMPTS = {
     "cot_en_subject": Prompt(_cot_en_subject, subject=subject_en, **COT_EN),
     "cot_en_role": Prompt(lambda r: EN_ROLE.format(subject=subject_en(r)) + _cot_en_subject(r), subject=subject_en,
                           **COT_EN),
+    # cot_en_role with the model's thinking mode on (Qwen3.5; 2026-10-27): reasoning inside <think>...</think>
+    "cot_en_role_think": Prompt(lambda r: EN_ROLE.format(subject=subject_en(r)) + _cot_en_subject(r),
+                                subject=subject_en, thinking=True, **dict(COT_EN, max_new_tokens=4096)),
+    # cot_en_role + one hint per subject group + the NOT rule (2026-10-27)
+    "cot_en_role_subject_aware": Prompt(
+        lambda r: EN_ROLE.format(subject=subject_en(r)) + EN_HEAD_SI_SUBJECT.format(subject=subject_en(r))
+        + subject_hint(r) + EN_NOT_RULE + EN_COT + f"\nQuestion: {q_si(r)}\n{options(r['choices'])}",
+        subject=subject_en, **COT_EN),
     "cot_en_fewshot2": Prompt(_cot_en, shots=2, pool=RATIONALE_POOL, example_reply=lambda e: e["rationale"], **COT_EN),
     # translation + reasoning (2026-10-24 evening): the winner's teacher-role reasoning with translated input
     "cot_en_role_bilingual": Prompt(

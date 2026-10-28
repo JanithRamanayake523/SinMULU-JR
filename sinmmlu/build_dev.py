@@ -1,11 +1,11 @@
 """Validate the public data and build the labelled dev files from public train (Easy only).
 
-  dev/easy_full.jsonl   all 1,851 public-train questions
-  dev/easy_clean.jsonl  minus the questions with a near-duplicate in the test set (full Jaccard >= 0.5)
-  dev/inference_subset.jsonl  20 random questions per subject from easy_clean (14 x 20 = 280): screening set for
+  dev/archive/easy_full.jsonl   all 1,851 public-train questions
+  dev/archive/easy_clean.jsonl  minus the questions with a near-duplicate in the test set (full Jaccard >= 0.5)
+  dev/archive/inference_subset.jsonl  20 random questions per subject from easy_clean (14 x 20 = 280): screening set for
                               inference conditions (prompts, scoring, translation) before any training
-  dev/fewshot_pool.jsonl      5 fixed examples per subject (not in the subset), the only source of few-shot examples
-  dev/inference_rest.jsonl    the rest of easy_clean: confirmation set for the screening winners
+  dev/archive/fewshot_pool.jsonl      5 fixed examples per subject (not in the subset), the only source of few-shot examples
+  dev/archive/inference_rest.jsonl    the rest of easy_clean: confirmation set for the screening winners
 Every dev row carries `overlaps_test`. The uid lists are also written to configs/subsets/ (tracked; dev/ is not).
 Usage: python -m sinmmlu.build_dev [--per-subject 20 --shots 5 --seed 42]
 """
@@ -50,23 +50,23 @@ def main():
     check(test, "public test", False)
     dup = dedup.overlapping_uids(train, test, remove_t=dedup.THRESHOLDS["public"][0])
     rows = [dict(slim(r), overlaps_test=r["uid"] in dup) for r in train]
-    write_jsonl("dev/easy_full.jsonl", rows)
+    write_jsonl("dev/archive/easy_full.jsonl", rows)
     clean = [r for r in rows if not r["overlaps_test"]]
-    write_jsonl("dev/easy_clean.jsonl", clean)
-    print(f"dev/easy_full.jsonl n={len(rows)}; dev/easy_clean.jsonl n={len(clean)} ({len(dup)} overlap the test set)")
+    write_jsonl("dev/archive/easy_clean.jsonl", clean)
+    print(f"dev/archive/easy_full.jsonl n={len(rows)}; dev/archive/easy_clean.jsonl n={len(clean)} ({len(dup)} overlap the test set)")
     sub = inference_subset(clean, a.per_subject, a.seed)
     chosen = {r["uid"] for r in sub}
     pool = fewshot_pool([r for r in clean if r["uid"] not in chosen], a.shots, a.seed)
     chosen |= {r["uid"] for r in pool}
     rest = [r for r in clean if r["uid"] not in chosen]
-    write_jsonl("dev/inference_subset.jsonl", sub)
-    write_jsonl("dev/fewshot_pool.jsonl", pool)
-    write_jsonl("dev/inference_rest.jsonl", rest)
+    write_jsonl("dev/archive/inference_subset.jsonl", sub)
+    write_jsonl("dev/archive/fewshot_pool.jsonl", pool)
+    write_jsonl("dev/archive/inference_rest.jsonl", rest)
     SUBSET_DIR.mkdir(parents=True, exist_ok=True)
     for name, rs in (("inference_subset", sub), ("fewshot_pool", pool), ("inference_rest", rest)):
         (SUBSET_DIR / f"{name}_uids.txt").write_text("".join(r["uid"] + "\n" for r in rs), encoding="utf-8", newline="\n")
-    print(f"dev/inference_subset.jsonl n={len(sub)} ({a.per_subject} per subject, seed {a.seed}); "
-          f"dev/fewshot_pool.jsonl n={len(pool)} ({a.shots} per subject); dev/inference_rest.jsonl n={len(rest)}; "
+    print(f"dev/archive/inference_subset.jsonl n={len(sub)} ({a.per_subject} per subject, seed {a.seed}); "
+          f"dev/archive/fewshot_pool.jsonl n={len(pool)} ({a.shots} per subject); dev/archive/inference_rest.jsonl n={len(rest)}; "
           f"uid lists -> {SUBSET_DIR.relative_to(ROOT)}")
 
 

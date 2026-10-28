@@ -11,22 +11,24 @@ from pathlib import Path
 from .data import load_test, submission_key
 
 
-def write_submission(rows, preds, out_dir):
+def write_submission(rows, preds, out_dir, full=True):
+    """full=False: rows are a subset of the test set (dev/test_subset300.jsonl); validated against their own keys."""
     out_dir = Path(out_dir)
     f = out_dir / "predictions.jsonl"
     with open(f, "w", encoding="utf-8", newline="\n") as fh:
         for r, y in zip(rows, preds):
             fh.write(json.dumps({"q_no": r["q_no"], "subject": r["subject"], "category": r["category"],
                                  "level": r["level"], "answer": str(y)}, ensure_ascii=False) + "\n")
-    if not validate(f):
+    if not validate(f, None if full else {submission_key(r) for r in rows}):
         raise SystemExit(f"{f} failed validation; not zipped")
     with zipfile.ZipFile(out_dir / "predictions.zip", "w", zipfile.ZIP_DEFLATED) as z:
         z.write(f, "predictions.jsonl")
     print(f"wrote {out_dir / 'predictions.zip'}")
 
 
-def validate(f):
-    expected = {submission_key(r) for r in load_test()}
+def validate(f, expected=None):
+    """expected: the submission keys the file must cover exactly (default: the whole public test set)."""
+    expected = expected if expected is not None else {submission_key(r) for r in load_test()}
     seen, errs = set(), []
     with open(f, encoding="utf-8-sig") as fh:
         for i, line in enumerate(fh, 1):

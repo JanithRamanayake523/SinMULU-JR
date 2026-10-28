@@ -13,11 +13,11 @@ Dev runs append a row to results/results.csv. Test runs print no accuracy-like d
 are skipped unless --force.
 
 Examples
-  python -m sinmmlu.evaluate --model configs/models/gemma3_4b_it.yaml --data dev/inference_subset.jsonl \\
+  python -m sinmmlu.evaluate --model configs/models/gemma3_4b_it.yaml --data dev/archive/inference_subset.jsonl \\
       --prompt paper_nosubject paper_subject_si --perms 1 4 --calibrate false true          # all combinations
-  python -m sinmmlu.evaluate --model ... --data dev/inference_subset.jsonl --prompt en_nosubject --translator nllb
+  python -m sinmmlu.evaluate --model ... --data dev/archive/inference_subset.jsonl --prompt en_nosubject --translator nllb
   python -m sinmmlu.evaluate --model ... --data test --prompt paper_subject_si --perms 4
-  python -m sinmmlu.evaluate --model ... --data dev/inference_subset.jsonl --limit 8      # smoke test, no results row
+  python -m sinmmlu.evaluate --model ... --data dev/archive/inference_subset.jsonl --limit 8      # smoke test, no results row
 """
 import argparse
 import collections
@@ -112,16 +112,18 @@ def parse_answer(text):
 
 
 def generate_cached(lm, rows, texts, gen_file, max_new, sample_seed=None, temperature=0.7):
-    """Reasoning text per row, cached in gen_file (an interrupted run resumes)."""
+    """Reasoning text per row, cached in gen_file and written batch by batch (an interrupted run resumes)."""
     cached = {g["uid"]: g["text"] for g in load_jsonl(gen_file)} if gen_file.exists() else {}
     todo = [i for i, r in enumerate(rows) if r["uid"] not in cached]
     if todo:
-        gens = lm.generate([texts[i] for i in todo], max_new, rendered=True, sample_seed=sample_seed,
-                           temperature=temperature)
         with open(gen_file, "a", encoding="utf-8", newline="\n") as fh:
-            for i, g in zip(todo, gens):
-                cached[rows[i]["uid"]] = g
-                fh.write(json.dumps({"uid": rows[i]["uid"], "text": g}, ensure_ascii=False) + "\n")
+            def save(k, g):
+                cached[rows[todo[k]]["uid"]] = g
+                fh.write(json.dumps({"uid": rows[todo[k]]["uid"], "text": g}, ensure_ascii=False) + "\n")
+                fh.flush()
+
+            lm.generate([texts[i] for i in todo], max_new, rendered=True, sample_seed=sample_seed,
+                        temperature=temperature, on_done=save)
     return [cached[r["uid"]] for r in rows]
 
 
@@ -144,7 +146,7 @@ def run_cot(lm, rows, prompt, out_dir, cond=None, seed=42):
     for s in range(n):
         perm = orders[s] if m > 1 else orders[0]
         view = [permute_options(r, perm) for r in rows] if m > 1 else rows
-        texts = [lm.render(P.build(r, prompt)) for r in view]
+        texts = [lm.render(P.build(r, prompt), thinking=p.thinking) for r in view]
         if n == 1:
             gens = generate_cached(lm, rows, texts, out_dir / "generations.jsonl", max_new)
         elif m > 1:
@@ -157,6 +159,8 @@ def run_cot(lm, rows, prompt, out_dir, cond=None, seed=42):
             ans, start = parse_answer(g)
             parsed.append(perm[ans - 1] + 1 if ans is not None else None)  # back to the original option number
             reasoning = g[:start] if start is not None else g  # cut the stated answer; the cue asks for it again
+            if p.thinking and "</think>" not in reasoning:  # cut off while thinking (or the tag was decoded away)
+                reasoning = reasoning.rstrip() + "\n</think>"
             scored.append(t + reasoning.rstrip() + p.cue)
         lps = lm.label_logprobs_text(scored, p.labels)
         for i, lp in enumerate(lps):
@@ -258,7 +262,7 @@ def save_experiment(eid, data, rows, probs, stats, cfg_extra, limit=None, write_
     out = ROOT / "outputs" / eid
     out.mkdir(parents=True, exist_ok=True)
     preds = [argmax1(p) for p in probs]
-    is_test = data == "test"
+    is_test = data == "test" or all(r.get("answer") is None for r in rows)  # unlabelled: a subset of the test set
     with open(out / "preds.jsonl", "w", encoding="utf-8", newline="\n") as fh:
         for r, p, y in zip(rows, probs, preds):
             rec = {"uid": r["uid"], "probs": [round(x, 6) for x in p], "pred": y}
@@ -270,7 +274,7 @@ def save_experiment(eid, data, rows, probs, stats, cfg_extra, limit=None, write_
         stats["majority_vote_acc"] = sum(v == int(r["answer"]) for v, r in zip(votes, rows)) / len(rows)
     summary = {}
     if is_test:
-        write_submission(rows, preds, out)
+        write_submission(rows, preds, out, full=data == "test")
     else:
         accs, share = summarise(rows, preds)
         summary = {"acc": accs, "option_share": share}

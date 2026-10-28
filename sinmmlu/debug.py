@@ -15,7 +15,7 @@ from .model import LM, label_token_ids, load_lm
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True)
-    ap.add_argument("--data", default="dev/easy_full.jsonl")
+    ap.add_argument("--data", default="dev/archive/easy_full.jsonl")
     ap.add_argument("--prompt", default="paper_nosubject", choices=sorted(P.PROMPTS))
     ap.add_argument("--chat", default="auto", choices=["auto", "on", "off"])
     ap.add_argument("--n", type=int, default=5)

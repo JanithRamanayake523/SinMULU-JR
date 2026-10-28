@@ -7,8 +7,8 @@ Translators (all open-weight, run inside our pipeline; their parameters count ag
 NLLB and MADLAD are sentence-level systems: text is split into lines and sentences, translated piece by piece and
 re-joined. The LLM translates whole texts. Segments without Sinhala letters are copied unchanged.
 
-  python -m sinmmlu.translate --backend nllb --data dev/inference_subset.jsonl
-  python -m sinmmlu.translate --backend self --model configs/models/gemma3_4b_it.yaml --data dev/inference_subset.jsonl
+  python -m sinmmlu.translate --backend nllb --data dev/archive/inference_subset.jsonl
+  python -m sinmmlu.translate --backend self --model configs/models/gemma3_4b_it.yaml --data dev/archive/inference_subset.jsonl
 Cache: cache/translations/<backend>.jsonl ({"src", "tgt"}) + <backend>.meta.json (model, revision, parameters).
 Translations of test questions are derived test data: cache/ is gitignored.
 """

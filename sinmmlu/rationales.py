@@ -2,7 +2,7 @@
 when its stated answer is the gold answer (dev data only; the pool is disjoint from every evaluation set).
 
   python -m sinmmlu.rationales --model configs/models/gemma3_4b_it.yaml
-Writes dev/fewshot_cot_en.jsonl (pool rows + "rationale", the reasoning up to and including "Answer: N"), in the pool
+Writes dev/archive/fewshot_cot_en.jsonl (pool rows + "rationale", the reasoning up to and including "Answer: N"), in the pool
 order, so the first examples of a subject are used first.
 """
 import argparse

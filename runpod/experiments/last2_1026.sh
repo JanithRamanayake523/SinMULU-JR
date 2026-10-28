@@ -3,14 +3,14 @@
 #  1. option-order averaging with reasoning: cot_en_role at 1,024 tokens under 2 cyclic option orders, averaged
 #  2. ensemble of the three confirmed English-reasoning prompts, all at 1,024 tokens
 # Rule: >= +2 points on the subset to go to the confirmation set.
-#   bash runpod/last2_1026.sh      (needs dev/fewshot_cot_en.jsonl, the worked examples made on 24 Oct)
+#   bash runpod/experiments/last2_1026.sh      (needs dev/archive/fewshot_cot_en.jsonl, the worked examples made on 24 Oct)
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 export HF_HOME="${SINMULU_HF_HOME:-/workspace/hf_cache}" PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false
 mkdir -p logs
 exec > >(tee -a "logs/last2_$(date +%Y%m%d_%H%M).log") 2>&1
 M=configs/models/gemma3_4b_it.yaml
-D=dev/inference_subset.jsonl
+D=dev/archive/inference_subset.jsonl
 G=gemma3_4b_it__none__
 T=__chaton__p1__c0__trnone__mt1024__inference_subset
 fail() { echo "FAILED: $1" | tee -a logs/failed.txt; }

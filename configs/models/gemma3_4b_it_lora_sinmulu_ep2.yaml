@@ -1,0 +1,11 @@
+# Epoch 2 of adapter B (continued with --init-adapter, lr 5e-5, shuffle seed 43). Gemma-3-4B-it + LoRA trained on sinmulu_si (our Sri Lankan MCQ collection; python -m sinmmlu.sinmulu, then
+# python -m sinmmlu.train_lora, 2026-10-27), merged into the weights: same architecture and parameter count as the base.
+name: gemma3_4b_it_lora_sinmulu_ep2
+model: models/gemma3_4b_it_lora_sinmulu_ep2
+revision: null
+chat_capable: true
+dtype: auto
+quant: none
+batch_size: 16
+gen_batch_size: 16
+seed: 42

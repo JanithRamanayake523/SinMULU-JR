@@ -38,12 +38,13 @@ English Reasoning over Sinhala Questions with Gemma-3-4B}\\[4pt]
 \noindent We describe our system and the complete experimental record for the Sinhala MMLU Shared Task at ICTer 2026,
 whose test set consists of 2,238 four-option multiple-choice questions from Sri Lankan 2025 school examinations
 (Easy, Medium, Hard). Under the task's 8B-parameter, open-weight, no-retrieval rules and a time budget of a few days, we
-use a single model, \texttt{google/gemma-3-4b-it} (4.30B parameters), without fine-tuning, and study 55 inference-time
+use a single model, \texttt{google/gemma-3-4b-it} (4.30B parameters), without fine-tuning, and study 59 inference-time
 conditions: prompt wording, subject and role information, few-shot examples, option-order averaging, contextual
 calibration, cloze scoring, 4-bit quantisation, a pretrained base model, chain-of-thought reasoning in Sinhala and in
 English with different length limits, self-consistency, prompt ensembles, three Sinhala$\rightarrow$English
-translation pipelines (NLLB-200, MADLAD-400, self-translation) with direct and reasoning-based answering, and prompts
-that target negation and option-by-option judgement.
+translation pipelines (NLLB-200, MADLAD-400, self-translation) with direct and reasoning-based answering, prompts
+that target negation and option-by-option judgement, a three-turn negation-consistency chain, and option-order
+averaging of the reasoning.
 Conditions were screened on a 280-question stratified subset of the public (Easy-only) training data and the best were
 confirmed on 1,483 held-out questions under selection rules fixed before the confirmation results were seen.
 \textbf{Letting Gemma reason step by step in English about the Sinhala question, then scoring the answer digit, raises
@@ -54,7 +55,9 @@ questions, whereas English reasoning over the original Sinhala handles them well
 that silently reduces next-token evaluation of Gemma to chance: the space before the answer digit is a separate token,
 so the reply must be pre-filled with ``\si{පිළිතුර}: '' (with a trailing space); without it only 5\% of the probability
 falls on the four digits. Two submissions have been produced and validated: English reasoning with a teacher role,
-limited to 512 and to 1,024 new tokens; their leaderboard scores are \todo{to be filled in after the Codabench upload}.
+limited to 512 and to 1,024 new tokens. The final system was reproduced from the committed code on a different machine
+with identical answers for all 2,238 test questions. Leaderboard scores: \todo{to be filled in after the Codabench
+upload}.
 \end{abstract}
 
 \tableofcontents
@@ -78,8 +81,10 @@ would not mislead us.
 \begin{enumerate}
 \item A reproducible evaluation pipeline for Sinhala MCQs (\texttt{sinmmlu/}) with label-mass validity checks,
 paired significance tests, and a strict separation of screening, confirmation and test data.
-\item A systematic screen of 55 inference-time conditions for Gemma-3-4B-it on Sinhala exam questions, and
+\item A systematic screen of 59 inference-time conditions for Gemma-3-4B-it on Sinhala exam questions, and
 pre-registered confirmations of the best candidates on 1,483 held-out questions.
+\item A verified reproduction: rebuilt from the committed code on a second machine, the final system gives the same
+answer on every one of the 2,238 test questions.
 \item The finding that \emph{English} chain-of-thought over the untranslated Sinhala question gives a robust gain
 of about +7 points, while machine translation (NLLB, MADLAD, self-translation) does not help, also not when combined
 with reasoning, because translations frequently lose negation.
@@ -725,6 +730,89 @@ Submission & Easy & Medium & Hard & Macro average\\
 \caption{Leaderboard results (to be filled in after the Codabench uploads).}
 \end{table}
 
+\subsection{Reproduction from a clean setup}\label{sec:reproduction}
+On 26 October the final system was rebuilt on a different machine (a new RTX~3090 pod) from the committed code
+(\texttt{ae9abe5}): fresh library install, dev files rebuilt from the raw data (identical id lists), Gemma-3-4B-it
+downloaded again (same revision \texttt{093f9f38\ldots}), then the test run of submission 2 repeated (3,680\,s; 4,282\,s
+originally), recorded with the clean code revision \texttt{ae9abe5}.
+\textbf{All 2,238 test answers are identical to the uploaded submission 2.} The two confirmation-set runs repeated on
+the new machine also gave identical accuracies (baseline 38.17\%, final system 45.58\%), as did the final system on
+the 280-question subset (48.93\%). Greedy decoding with bfloat16 on the same GPU type is therefore exactly
+reproducible with this code.
+
+\subsection{Question types on the confirmation set}
+The type analysis of Section~\ref{sec:negation} was repeated for the final system on the 1,483 confirmation questions,
+where the groups are larger (Table~\ref{tab:qtypes_rest}).
+
+\begin{table}[h]
+\centering\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrrrr}
+\toprule
+Condition (confirmation set) & All & Negation (157) & Sub-option (22) & Blank (104) & Numeric (119) & Plain (1,123)\\
+\midrule
+A0 baseline (direct scoring) & 38.2 & 37.6 & 27.3 & 28.8 & 35.3 & 39.2\\
+final system (\cond{cot\_en\_role}, 1,024) & \textbf{45.6} & \textbf{50.3} & 31.8 & 35.6 & 37.0 & 46.3\\
+gain & +7.4 & \textbf{+12.7} & +4.5 & +6.8 & +1.7 & +7.1\\
+\bottomrule
+\end{tabular}
+\caption{Accuracy (\%) by question type on the confirmation set (descriptive).}
+\label{tab:qtypes_rest}
+\end{table}
+
+English reasoning helps negated questions most (+12.7), confirming the subset observation on five times as many
+questions. Sub-option (combinations of statements), fill-in-the-blank and numeric questions remain the weakest types
+(31.8--37.0\%) and gain least: they are natural targets for later fine-tuning data.
+
+\subsection{Final screening round}\label{sec:final_round}
+Three more ideas were screened on the subset against the final system at 1,024 tokens (48.9\%), with the same
+pre-stated rule (+2 points to go to the confirmation set):
+\begin{itemize}
+\item \textbf{Negation-consistency chain} (\cond{cot\_en\_role\_negchain}), a three-turn conversation: (1) reason in
+English and list \emph{all} correct options (``more than one option may be correct'', $\le$ 1,024 tokens);
+(2) write the opposite question in English (``which options are NOT correct'', or the reverse for an already negated
+question), reason and list its options ($\le$ 1,024 tokens); (3) with both analyses in the conversation, choose the
+single correct answer to the original question ($\le$ 256 tokens), scored after ``Answer:\textvisiblespace''.
+\item \textbf{Option-order averaging of the reasoning}: the final system reasons under the original option order and
+under the order shifted by one position (every option moves); the two scored label distributions are mapped back to
+the original options and averaged.
+\item \textbf{Three-prompt ensemble at 1,024 tokens}: \cond{cot\_en} + \cond{cot\_en\_role} + \cond{cot\_en\_fewshot2},
+all at 1,024 tokens (the same 28 model-written worked examples as before).
+\end{itemize}
+
+\begin{table}[h]
+\centering\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrrr}
+\toprule
+Condition (subset, $n$=280) & Acc. & Gain & CI of gain & $p$ & Time (s)\\
+\midrule
+reference: \cond{cot\_en\_role}, 1,024 tokens (final system) & 48.9 & -- & -- & -- & 438\\
+negation-consistency chain & 47.5 & $-$1.4 & [$-$7.9, +5.0] & 0.74 & 1,236\\
+option-order averaging of the reasoning (2 orders) & 49.6 & +0.7 & [$-$3.9, +5.4] & 0.88 & 857\\
+ensemble of 3 reasoning prompts, 1,024 tokens & 50.7 & +1.8 & [$-$2.9, +6.4] & 0.54 & 1,273\\
+\quad part: \cond{cot\_en}, 1,024 tokens & 47.9 & $-$1.1 & [$-$7.1, +5.0] & 0.81 & 317\\
+\quad part: \cond{cot\_en\_fewshot2}, 1,024 tokens & 50.7 & +1.8 & [$-$4.3, +7.9] & 0.65 & 517\\
+\bottomrule
+\end{tabular}
+\caption{Final screening round. None reaches the pre-stated +2 points. Times on one RTX~3090 for 280 questions; the
+ensemble time is the sum of its three parts.}
+\label{tab:final_round}
+\end{table}
+
+\paragraph{Why the negation chain does not help.} The model followed the protocol (both lists were produced for
+100\% of the questions; a final answer was stated for 98.6\%), but in step 1 it marked on average \textbf{2.0 options
+as correct} although exactly one is, and in step 2 it assigned 2.7 options to the opposite question; the final step
+inherits these inconsistent judgements. The chain hurts most on the questions it targets: negated questions fall from
+58.8\% to 47.1\% and fill-in-the-blank questions from 62.5\% to 43.8\% (subset), presumably because writing the
+opposite of a ``which is NOT \ldots'' question creates a double negation. Together with the earlier result for
+option-by-option judgement ($-$10.0), this indicates that Gemma-3-4B decides best when it reasons directly towards a
+single answer.
+
+\paragraph{Averaging and ensembling.} Averaging the reasoning over two option orders adds only +0.7 at twice the
+cost, so the reasoning has little position bias to cancel. The ensemble comes closest (+1.8) and is consistent with
+its 512-token result on the confirmation set (+1.1, $p$ = 0.31): its real gain is probably about one point, below what
+the confirmation set can detect ($\pm$2.5 points) and at three times the test-time cost. Neither was confirmed;
+\textbf{submission 2 remains the final system.}
+
 %=====================================================================================================================
 \section{Final system}\label{sec:system}
 The current final system is submission 2; submission 1 differs only in the reasoning limit (512 tokens).
@@ -786,6 +874,12 @@ MADLAD with beam 4 and batch 32 ran out of GPU memory (24\,GB) & wave-3 translat
 halving on out-of-memory\\
 Parameter counter counted tied embeddings twice & Gemma 4.97B instead of 4.30B; Gemma+MADLAD wrongly reported as
 over 8B & count from the safetensors headers (Section~\ref{sec:params})\\
+Pod terminated instead of stopped (25 Oct) & the volume with the raw outputs of the follow-up runs was deleted &
+results copied off the pod before every shutdown; the most important runs repeated (Section~\ref{sec:reproduction})\\
+Slow network on new pods (26 Oct: Python packages 0.05--1.2\,MB/s, Hugging Face 1--2\,MB/s per connection) & one
+pod unusable; setup slow & \texttt{runpod/speedtest.sh} before any install; only the final model downloaded\\
+\texttt{runpodctl} transfers of a 4.7\,MB archive arrived corrupted (same size, damaged middle) & code would not
+unpack & 1\,MB parts, each checked by MD5 and resent if needed\\
 \bottomrule
 \end{longtable}}
 
@@ -796,19 +890,24 @@ over 8B & count from the safetensors headers (Section~\ref{sec:params})\\
 \texttt{evaluate} (runs conditions), \texttt{translate}, \texttt{ensemble}, \texttt{rationales}, \texttt{report}
 (paired statistics), \texttt{select\_winner}, \texttt{predict\_winner}, \texttt{submit} (format validation),
 \texttt{build\_dev}, \texttt{dedup}, \texttt{tokens}, \texttt{debug}, and the analysis-only \texttt{negation} and
-\texttt{qtypes}. 36 offline tests (including a fake bigram model that checks batched label and cloze scoring against
-an unbatched reference, a simulated out-of-memory split, and a stub model for self-consistency) run without a GPU.
-The code is in git (branch \texttt{initial-setup}, commit \texttt{4a4aa89}). Every experiment stores its configuration, model revision, parameter count, library versions, GPU and
+\texttt{qtypes}. 38 offline tests (including a fake bigram model that checks batched label and cloze scoring against
+an unbatched reference, a simulated out-of-memory split, and stub models for self-consistency, the multi-turn
+negation chain and option-order averaging of the reasoning) run without a GPU.
+The code is in git (branch \texttt{initial-setup}, commit \texttt{f15939b}); reproducing submission 2 from a clean setup
+gives identical answers for all 2,238 test questions (Section~\ref{sec:reproduction}). Every experiment stores its configuration, model revision, parameter count, library versions, GPU and
 git revision in \texttt{outputs/<experiment>/config.json}.
 
 \paragraph{Commands} (RunPod, after uploading the code and data):
 \begin{Verbatim}[fontsize=\small,frame=single]
 export HF_TOKEN=...                      # read token; Gemma licence accepted
-bash runpod/setup.sh                     # GPU check, pinned libraries, dev files, tests, model downloads
+bash runpod/speedtest.sh                 # network check before installing anything
+bash runpod/setup.sh                     # GPU check, pinned libraries, dev files, tests, gemma-3-4b-it only
+bash runpod/rerun_1026.sh                # reproduce submission 2 and compare; final system on the 1,483
 bash runpod/run_subset.sh smoke          # then wave1, wave2, wave3, combos, confirm
 bash runpod/select_and_test.sh           # selection rule -> submission 1
 bash runpod/run_subset.sh cheap          # then translation, qtypes (follow-up screening)
 bash runpod/confirm2.sh                  # second confirmation + selection -> submission 2
+bash runpod/negchain_1026.sh             # final screening round (with runpod/last2_1026.sh)
 # or directly, the final system only:
 python -m sinmmlu.evaluate --model configs/models/gemma3_4b_it.yaml --data test \
        --prompt cot_en_role --chat on --max-new-tokens 1024
@@ -819,7 +918,8 @@ outputs/gemma3_4b_it__none__cot_en_role__chaton__p1__c0__trnone__mt1024__test/pr
 \end{Verbatim}
 Greedy decoding makes the run deterministic up to floating-point differences between GPUs.
 
-\paragraph{Cost.} All runs together took about 10 GPU-hours on one RTX~3090: a label-scored condition takes 5--42\,s
+\paragraph{Cost.} All runs together took about 13.5 GPU-hours on RTX~3090s (about 10 on 24 October, about 3.5 for the
+reproduction and the final screening round on 26 October): a label-scored condition takes 5--42\,s
 for 280 questions (few-shot prompts are the slowest), a reasoning condition 6--9 minutes for 280 questions and 31--47
 minutes for 1,483, and a test run 51 (512 tokens) to 71 minutes (1,024 tokens).
 
@@ -840,10 +940,12 @@ were printed once; for submission 2, the number of answers that differ from subm
 labels, nothing was chosen from them, and no other test-set statistic was computed.
 \item \textbf{Lost raw outputs.} The rented pod was terminated on 25 October, which deleted its volume before the raw
 outputs of the follow-up experiments (Section~\ref{sec:followup}) had been copied. All numbers in this report were
-recorded in our lab notebook before that; the per-question predictions and reasoning texts of those runs, some
-per-type cells (Table~\ref{tab:qtypes}) and the translation caches would have to be regenerated (greedy decoding and
-fixed seeds make this possible). Raw outputs of the screening waves, combinations, the first confirmation and the
-submission-1 test run, and both submission files, are kept.
+recorded in our lab notebook before that. On 26 October the most important runs were repeated with identical results
+(Section~\ref{sec:reproduction}), restoring the per-question outputs of the final system on the confirmation set and
+its 2,238 test reasoning texts. Still missing are the per-question outputs of the other follow-up runs of 24 October,
+some per-type cells (Table~\ref{tab:qtypes}) and the translation caches; greedy decoding and fixed seeds make them
+reproducible if needed. Raw outputs of the screening waves, combinations, the first confirmation, the final screening
+round and both submission files are kept.
 \item \textbf{Licences.} NLLB (used only in screening) is CC-BY-NC~4.0; the final system uses only Gemma (Gemma
 terms of use).
 \end{itemize}
@@ -854,11 +956,13 @@ terms of use).
 \item Fine-tuning with LoRA on Global-MMLU-si (and the public training data, if the team agrees), judged by the same
 confirmation protocol, with \textbf{negation-focused training data} (for example ``which is NOT \ldots'' questions
 and negated/non-negated question pairs) and a separate negation evaluation, since negation is the clearest failure
-mode of direct scoring and of translated input (Section~\ref{sec:negation}).
-\item The three-prompt reasoning ensemble (+1.1 on the confirmation set, not significant) if test-time compute allows.
+mode of direct scoring and of translated input (Section~\ref{sec:negation}); and data for the weakest types on the
+confirmation set: sub-option, fill-in-the-blank and numeric questions (Table~\ref{tab:qtypes_rest}).
+\item The three-prompt reasoning ensemble (+1.1 on the confirmation set at 512 tokens, +1.8 on the subset at 1,024;
+not significant) if test-time compute and a larger labelled evaluation set allow a decision.
 \end{enumerate}
 Explored and not pursued: self-consistency, translation pipelines with and without reasoning, option-by-option
-judgement, calibration, cloze scoring.
+judgement, the negation-consistency chain, option-order averaging of the reasoning, calibration, cloze scoring.
 
 %=====================================================================================================================
 \begin{thebibliography}{9}
@@ -968,6 +1072,10 @@ RunPod RTX~3090 set up; smoke test (pre-fill bug found and fixed); waves 1--3; c
 submission 1; parameter-count correction; code committed (\texttt{f11ed8e}); reasoning length, self-consistency and
 ensemble; translation with reasoning; negation and question-type analysis; second confirmation; submission 2.
 \item 25 Oct: code committed (\texttt{4a4aa89}); pod terminated (follow-up raw outputs lost, numbers kept).
+\item 26 Oct: one pod rejected after a network speed test; on a second pod (code \texttt{ae9abe5}) submission 2
+reproduced exactly (2,238/2,238), final system rerun on the confirmation set; final screening round (negation chain,
+option-order averaging of the reasoning, 1,024-token ensemble); all results copied off the pod; code committed
+(\texttt{f15939b}).
 \item 27 Oct: leaderboard closes. 28 Oct: code. 30 Oct: report and slides.
 \end{itemize}
 

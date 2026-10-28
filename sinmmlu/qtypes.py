@@ -1,6 +1,6 @@
 """Analysis only (never used at inference): accuracy of every finished experiment by question type. Dev data only.
 
-  python -m sinmmlu.qtypes --data dev/inference_subset.jsonl [--filter cot_en_role]
+  python -m sinmmlu.qtypes --data dev/archive/inference_subset.jsonl [--filter cot_en_role]
 Types (heuristics on the question text; a question can have several):
   negation   a Sinhala negation / "wrong" word in the question (sinmmlu.negation.SI_NEGATION)
   suboption  labelled parts: at least two options name a part letter A-E or a Roman numeral (i-iv)

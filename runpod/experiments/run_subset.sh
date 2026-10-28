@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
-# Screening study on dev/inference_subset.jsonl (280 questions, 20 per subject). Every step skips finished
+# Screening study on dev/archive/inference_subset.jsonl (280 questions, 20 per subject). Every step skips finished
 # experiments, so a wave can simply be restarted after a crash or a pod restart.
-#   bash runpod/run_subset.sh smoke      # 8 questions through every code path (~5 min), no results rows
-#   bash runpod/run_subset.sh wave1      # prompts, scoring, precision, model references
-#   bash runpod/run_subset.sh wave2      # few-shot, translation (NLLB, self-translation)
-#   bash runpod/run_subset.sh wave3      # reasoning (Sinhala / English), MADLAD translation
-#   bash runpod/run_subset.sh report     # comparison table + per-subject accuracy
+#   bash runpod/experiments/run_subset.sh smoke      # 8 questions through every code path (~5 min), no results rows
+#   bash runpod/experiments/run_subset.sh wave1      # prompts, scoring, precision, model references
+#   bash runpod/experiments/run_subset.sh wave2      # few-shot, translation (NLLB, self-translation)
+#   bash runpod/experiments/run_subset.sh wave3      # reasoning (Sinhala / English), MADLAD translation
+#   bash runpod/experiments/run_subset.sh report     # comparison table + per-subject accuracy
 # Log: logs/<wave>_<time>.log; failed steps are listed in logs/failed.txt and do not stop the wave.
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 export HF_HOME="${SINMULU_HF_HOME:-/workspace/hf_cache}" PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false
 WAVE="${1:?usage: run_subset.sh smoke|wave1|wave2|wave3|combos|confirm|cheap|translation|qtypes|report}"
 mkdir -p logs
 exec > >(tee -a "logs/${WAVE}_$(date +%Y%m%d_%H%M).log") 2>&1
 
 M=configs/models/gemma3_4b_it.yaml
-D=dev/inference_subset.jsonl
+D=dev/archive/inference_subset.jsonl
 BASELINE=gemma3_4b_it__none__paper_nosubject__chaton__p1__c0__trnone__inference_subset
 
 run() {
@@ -73,7 +73,7 @@ combos)
     ;;
 confirm)
     # step 2: the pre-registered candidates (docs/log.md) + baseline on the 1,483 held-out questions (~2.5 h)
-    R=dev/inference_rest.jsonl
+    R=dev/archive/inference_rest.jsonl
     run python -m sinmmlu.evaluate --data $R --model $M --prompt paper_nosubject                   # A0
     run python -m sinmmlu.evaluate --data $R --model $M --prompt cot_en_fewshot2 cot_en cot_en_role cot_si
     P=gemma3_4b_it__none__

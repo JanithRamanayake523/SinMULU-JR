@@ -1,0 +1,11 @@
+# Qwen3.5-4B + LoRA (rank 16) trained on Global-MMLU si + sinmulu_si combined (10% validation; python -m sinmmlu.combined, then
+# python -m sinmmlu.train_lora, 2026-10-27), merged into the weights: same architecture and parameter count as Qwen3.5-4B (4,659,865,088).
+name: qwen35_4b_lora_combined
+model: models/qwen35_4b_lora_combined
+revision: null
+chat_capable: true
+dtype: auto
+quant: none
+batch_size: 16
+gen_batch_size: 16          # 48 on the A100 40 GB (thinking run, 2026-10-28)
+seed: 42

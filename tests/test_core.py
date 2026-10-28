@@ -1,4 +1,5 @@
 """Offline tests (no model weights, no GPU). Run: python -m pytest -q"""
+import collections
 import random
 
 import pytest
@@ -11,10 +12,43 @@ from sinmmlu.metrics import holm, mcnemar_exact, paired_bootstrap
 from sinmmlu.scoring import argmax1, score_rows
 from sinmmlu.translate import join_segments, split_segments
 
-ROWS = load_jsonl("dev/inference_subset.jsonl")[:40]
+ROWS = load_jsonl("dev/archive/inference_subset.jsonl")[:40]
 EN = [dict(r, question_en=f"Q{i}?", choices_en=[f"opt{i}{k}" for k in "abcd"]) for i, r in enumerate(ROWS)]
 DIGIT_PROMPTS = [n for n, p in P.PROMPTS.items() if p.method == "digits"]
 MCFG = {"name": "m", "model": "x/m", "quant": "none", "chat_capable": True}
+
+
+def deliver(texts, on_done):
+    """Fake LM.generate output: reported per item through on_done, as the real one does batch by batch."""
+    for i, t in enumerate(texts):
+        if on_done:
+            on_done(i, t)
+    return texts
+
+
+def test_generation_is_saved_as_it_goes_and_resumes(tmp_path):
+    from sinmmlu.evaluate import generate_cached
+    rows = [{"uid": f"u{i}"} for i in range(5)]
+
+    class Dies:
+        def generate(self, texts, max_new, rendered=False, sample_seed=None, temperature=0.7, on_done=None):
+            on_done(0, "a")
+            on_done(1, "b")
+            raise KeyboardInterrupt  # stopped mid-run
+
+    class Rest:
+        seen = None
+
+        def generate(self, texts, max_new, rendered=False, sample_seed=None, temperature=0.7, on_done=None):
+            Rest.seen = list(texts)
+            return deliver([t.upper() for t in texts], on_done)
+
+    f = tmp_path / "generations.jsonl"
+    with pytest.raises(KeyboardInterrupt):
+        generate_cached(Dies(), rows, list("vwxyz"), f, 8)
+    assert len(load_jsonl(f)) == 2
+    assert generate_cached(Rest(), rows, list("vwxyz"), f, 8) == ["a", "b", "X", "Y", "Z"]
+    assert Rest.seen == ["x", "y", "z"]
 
 
 def oracle_scorer(rows, prompt):
@@ -73,7 +107,7 @@ def test_prompts_build():
 
 def test_fewshot_examples():
     pool = {e["uid"] for e in load_jsonl(P.FEWSHOT_POOL)}
-    subset = {r["uid"] for r in load_jsonl("dev/inference_subset.jsonl")}
+    subset = {r["uid"] for r in load_jsonl("dev/archive/inference_subset.jsonl")}
     assert not pool & subset
     r = ROWS[0]
     ex = P.examples(r, 5)
@@ -298,14 +332,14 @@ def test_self_consistency_soft_and_majority_vote(tmp_path):
         def __init__(self):
             self.calls = []
 
-        def render(self, turns):
+        def render(self, turns, thinking=False):
             return turns[-1][1]
 
-        def generate(self, texts, max_new, rendered=False, sample_seed=None, temperature=0.7):
+        def generate(self, texts, max_new, rendered=False, sample_seed=None, temperature=0.7, on_done=None):
             self.calls.append((max_new, sample_seed))
             s = 0 if sample_seed is None else (sample_seed - 42) // 1000
             # sample 0 and 1 say "2", sample 2 says "3", for every question
-            return [f"reasoning {s}\nAnswer: {3 if s == 2 else 2}" for _ in texts]
+            return deliver([f"reasoning {s}\nAnswer: {3 if s == 2 else 2}" for _ in texts], on_done)
 
         def label_logprobs_text(self, texts, labels):
             out = []
@@ -332,14 +366,14 @@ def test_negation_chain_turns_limits_and_cache(tmp_path):
         def __init__(self):
             self.calls = []
 
-        def render(self, turns):
+        def render(self, turns, thinking=False):
             return " || ".join(f"{role}:{text[:12]}" for role, text in turns)
 
-        def generate(self, texts, max_new, rendered=False, sample_seed=None, temperature=0.7):
+        def generate(self, texts, max_new, rendered=False, sample_seed=None, temperature=0.7, on_done=None):
             self.calls.append((max_new, texts[0].count("user:")))
             step = len(self.calls) - 1
             replies = ["... Correct options: 2, 3", "... Options for the opposite question: 1, 4", "short.\nAnswer: 3"]
-            return [replies[step] for _ in texts]
+            return deliver([replies[step] for _ in texts], on_done)
 
         def label_logprobs_text(self, texts, labels):
             assert all(t.endswith("\n\nAnswer: ") and "user:Now use both" in t for t in texts)
@@ -361,11 +395,11 @@ def test_reasoning_option_order_averaging_maps_back():
     gold_text = {id(r): norm_model(r["choices"][1]) for r in rows}
 
     class StubLM:  # always picks the position that currently shows the gold option text
-        def render(self, turns):
+        def render(self, turns, thinking=False):
             return turns[-1][1]
 
-        def generate(self, texts, max_new, rendered=False, sample_seed=None, temperature=0.7):
-            return ["reasoning" for _ in texts]
+        def generate(self, texts, max_new, rendered=False, sample_seed=None, temperature=0.7, on_done=None):
+            return deliver(["reasoning" for _ in texts], on_done)
 
         def label_logprobs_text(self, texts, labels):
             out = []
@@ -376,3 +410,94 @@ def test_reasoning_option_order_averaging_maps_back():
 
     probs, stats = run_cot(StubLM(), rows, "cot_en", pathlib.Path(tempfile.mkdtemp()), {"perms": 2})
     assert all(argmax1(p) == 2 for p in probs) and stats["orders"] == 2
+
+
+def test_lora_step_plan_covers_every_example_once_within_budget():
+    from sinmmlu.train_lora import plan_steps
+    lengths = [random.Random(i).randint(20, 900) for i in range(301)]
+    steps = plan_steps(lengths, 32, 4096, random.Random(0))
+    flat = [i for st in steps for m in st for i in m]
+    assert sorted(flat) == list(range(301)) and len(steps) == 10
+    assert all(sum(len(m) for m in st) == 32 for st in steps[:-1])
+    assert all(len(m) == 1 or len(m) * max(lengths[i] for i in m) <= 4096 for st in steps for m in st)
+
+
+def test_global_mmlu_conversion():
+    from sinmmlu.gmmlu import convert
+    src = [{"sample_id": f"s/{k}", "subject": "high_school_physics", "subject_category": cat, "question": "q",
+            "option_a": a, "option_b": "x", "option_c": "y", "option_d": "z", "answer": ans}
+           for k, (cat, a, ans) in enumerate([("STEM", "w", "B"), ("Medical", "", "A"), ("Social Sciences", "w", "D")])]
+    rows, dropped = convert(src)
+    assert dropped == ["s/1"]
+    assert [r["q_no"] for r in rows] == ["gsi00001", "gsi00002"]
+    assert rows[0] == {"q_no": "gsi00001", "subject": "High School Physics", "category": "stem", "question": "q",
+                       "choices": ["w", "x", "y", "z"], "answer": 2}
+    assert rows[1]["category"] == "social_science" and rows[1]["answer"] == 4
+
+
+def test_sinmulu_dedup_and_split_share_no_question_text():
+    from sinmmlu.sinmulu import prepare
+    mcqs = [{"id": f"osi{i:05d}", "subject": f"S{i % 3}", "question": f"q{i % 40}", "choices": ["a", "b", "c", str(i)],
+             "answer": str(i % 4 + 1)} for i in range(120)]
+    mcqs.append(dict(mcqs[5], id="osi99999"))  # same question and options as osi00005
+    train, val, dup = prepare(mcqs, frac=0.1)
+    assert dup == 1 and len(train) + len(val) == 120
+    assert not {r["question"] for r in train} & {r["question"] for r in val}
+    assert all(isinstance(r["answer"], int) for r in train + val)
+
+
+def test_test_subset_is_level_balanced_and_spread_over_subjects():
+    from sinmmlu.data import load_test
+    from sinmmlu.test_subset import stratified
+    test = load_test()
+    rows = stratified(test, 100, 42)
+    assert collections.Counter(r["level"] for r in rows) == {"easy": 100, "medium": 100, "hard": 100}
+    assert len({r["uid"] for r in rows}) == 300
+    for lvl in ("easy", "medium", "hard"):
+        files = {r["file"] for r in test if r["level"] == lvl}
+        assert {r["file"] for r in rows if r["level"] == lvl} == files  # every subject of the level is present
+    assert stratified(test, 100, 42) == rows
+
+
+def test_unlabelled_subset_gets_a_subset_submission(tmp_path):
+    from sinmmlu.data import load_test, submission_key
+    from sinmmlu.submit import validate, write_submission
+    rows = load_test()[:5]
+    write_submission(rows, [1, 2, 3, 4, 1], tmp_path, full=False)
+    assert (tmp_path / "predictions.zip").exists()
+    assert validate(tmp_path / "predictions.jsonl", {submission_key(r) for r in rows})
+    assert not validate(tmp_path / "predictions.jsonl")  # not a full submission
+
+
+def test_combined_keeps_each_source_split_and_no_shared_text():
+    from sinmmlu.combined import combine
+    q = lambda i, t: {"q_no": i, "subject": "S", "question": t, "choices": ["a", "b", "c", "d"], "answer": 1,
+                      "category": "x"}
+    g = ([q("gsi00001", "alpha"), q("gsi00002", "beta")], [q("gsi00003", "gamma")])
+    o = ([q("osi00001", "delta")], [q("osi00002", "beta"), q("osi00003", "eps")])  # osi00002 repeats a gsi train text
+    train, val, moved = combine([g, o])
+    assert moved == 1 and [r["q_no"] for r in val] == ["gsi00003", "osi00003"]
+    assert "osi00002" in {r["q_no"] for r in train} and "category" not in train[0]
+
+
+def test_thinking_prompt_closes_an_unfinished_think_block(tmp_path):
+    from sinmmlu.evaluate import run_cot
+    rows = [dict(r) for r in ROWS[:2]]
+    seen = {}
+
+    class StubLM:
+        def render(self, turns, thinking=False):
+            seen["thinking"] = thinking
+            return "PROMPT|"
+
+        def generate(self, texts, max_new, rendered=False, sample_seed=None, temperature=0.7, on_done=None):
+            return deliver(["thinking that never ends", "done</think>\n\nAnswer: 3"], on_done)
+
+        def label_logprobs_text(self, texts, labels):
+            seen["texts"] = texts
+            return [[-1.0, -2.0, -0.5, -3.0]] * len(texts)
+
+    run_cot(StubLM(), rows, "cot_en_role_think", tmp_path)
+    assert seen["thinking"] is True
+    assert seen["texts"][0] == "PROMPT|thinking that never ends\n</think>\n\nAnswer: "
+    assert seen["texts"][1] == "PROMPT|done</think>\n\nAnswer: "

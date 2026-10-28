@@ -1,0 +1,11 @@
+# Gemma-3-4B-it + LoRA trained on sinmulu_si (our Sri Lankan MCQ collection; python -m sinmmlu.sinmulu, then
+# python -m sinmmlu.train_lora, 2026-10-27), merged into the weights: same architecture and parameter count as the base.
+name: gemma3_4b_it_lora_sinmulu
+model: models/gemma3_4b_it_lora_sinmulu
+revision: null
+chat_capable: true
+dtype: auto
+quant: none
+batch_size: 16
+gen_batch_size: 16
+seed: 42

@@ -103,6 +103,27 @@ def load_rows(spec):
     return load_test() if spec == "test" else load_jsonl(spec)
 
 
+def split_by_subject(rows, frac, seed=42):
+    """Validation split of training data (rows with q_no, subject, question): `frac` of each subject, at least 1 for
+    subjects with >= 10 questions, sampled with Random(seed) over the subjects in sorted order. Validation questions
+    whose text (norm_dedup) also occurs in the training part move to train, so no question text is in both.
+    Returns (train, val), each in the input order."""
+    import collections
+    rng = random.Random(seed)
+    by = collections.defaultdict(list)
+    for r in rows:
+        by[r["subject"]].append(r)
+    val_ids = set()
+    for s in sorted(by):
+        n = len(by[s])
+        k = max(1, round(frac * n)) if n >= 10 else 0
+        val_ids.update(r["q_no"] for r in rng.sample(by[s], k))
+    train_q = {norm_dedup(r["question"]) for r in rows if r["q_no"] not in val_ids}
+    val = [r for r in rows if r["q_no"] in val_ids and norm_dedup(r["question"]) not in train_q]
+    vset = {r["q_no"] for r in val}
+    return [r for r in rows if r["q_no"] not in vset], val
+
+
 def submission_key(r):
     return (r["level"], r["subject"], r["category"], r["q_no"])
 

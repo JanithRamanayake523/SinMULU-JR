@@ -5,6 +5,7 @@
 set -u
 T=$(mktemp -d)
 echo "GPU: $(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null)"
+python -c "import torch; torch.ones(1, device='cuda'); torch.cuda.synchronize(); print('GPU compute: ok')" 2>/dev/null     || echo "GPU compute: FAILED (the GPU is visible but refuses work: replace the pod)"
 echo "Disk: $(df -h /workspace | tail -1 | awk '{print $4 " free on /workspace"}'), $(df -h / | tail -1 | awk '{print $4 " free on /"}')"
 curl -sS -o /dev/null -w "PyPI index:       %{http_code} in %{time_total}s\n" https://pypi.org/simple/numpy/
 start=$(date +%s.%N)

@@ -1,0 +1,12 @@
+# Versions of our final run (NVIDIA A100 40 GB, CUDA 12.8, Python 3.12).
+torch==2.8.0
+transformers==5.18.0
+accelerate==1.15.0
+peft==0.21.1
+huggingface_hub==1.33.0
+numpy==2.1.3
+# Qwen3.5 linear-attention (Gated DeltaNet) kernels; 0.5+ needs a newer Triton than torch 2.8 ships
+flash-linear-attention==0.4.0
+# Our run also had causal-conv1d==1.7.0 (fast short-convolution kernel). It needs torch at build time, so it cannot
+# be installed from this file; for identical kernels install it afterwards (optional, transformers falls back to torch):
+#   pip install causal-conv1d==1.7.0 --no-build-isolation

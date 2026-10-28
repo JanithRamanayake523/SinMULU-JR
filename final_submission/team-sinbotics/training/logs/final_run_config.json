@@ -1,0 +1,55 @@
+{
+  "exp_id": "qwen35_4b_lora_combined__none__cot_en_role_think__chaton__p1__c0__trnone__mt4096__test",
+  "data": "test",
+  "n": 2238,
+  "method": "cot",
+  "model_cfg": {
+    "name": "qwen35_4b_lora_combined",
+    "model": "models/qwen35_4b_lora_combined",
+    "revision": null,
+    "chat_capable": true,
+    "dtype": "auto",
+    "quant": "none",
+    "batch_size": 16,
+    "gen_batch_size": 48,
+    "seed": 42
+  },
+  "condition": {
+    "prompt": "cot_en_role_think",
+    "chat": "on",
+    "perms": 1,
+    "calibrate": false,
+    "translator": "none",
+    "max_new_tokens": 4096
+  },
+  "model_info": {
+    "dtype_resolved": "bfloat16",
+    "quant": "none",
+    "revision_resolved": null,
+    "n_params_total": 4205751296,
+    "context_length": 262144
+  },
+  "env": {
+    "python": "3.12.3",
+    "git_rev": null,
+    "torch": "2.8.0+cu128",
+    "transformers": "5.18.0",
+    "accelerate": "1.15.0",
+    "bitsandbytes": "0.50.2",
+    "peft": "0.21.1",
+    "cuda": "12.8",
+    "gpu": "NVIDIA A100-SXM4-40GB"
+  },
+  "translator_meta": null,
+  "stats": {
+    "parse_rate": 0.5598748882931188,
+    "parsed_agrees_with_scored": 0.9744612928970471,
+    "label_mass_mean": 0.999323195996098,
+    "label_mass_min": 0.09185313298483676,
+    "max_new_tokens": 4096,
+    "samples": 1,
+    "orders": 1,
+    "max_len": 4865,
+    "seconds": 14778.8
+  }
+}

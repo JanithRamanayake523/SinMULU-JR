@@ -1,0 +1,12 @@
+# Qwen3.5-4B (released 2026-02-27, Apache-2.0, not gated): 4,659,865,088 parameters (vision tower included), < 8B.
+# Hybrid: 24 linear-attention (Gated DeltaNet) + 8 full-attention layers; needs flash-linear-attention for speed.
+# Chat template has a thinking mode; model.render() switches it off (enable_thinking=False).
+name: qwen35_4b
+model: Qwen/Qwen3.5-4B
+revision: 851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a
+chat_capable: true
+dtype: auto
+quant: none
+batch_size: 16
+gen_batch_size: 48          # Qwen3.5: small generation memory (24 of 32 layers linear attention); L40 46 GB
+seed: 42

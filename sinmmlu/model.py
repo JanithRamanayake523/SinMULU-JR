@@ -51,6 +51,9 @@ def load_lm(model_id, revision=None, dtype="auto", quant="none"):
         from transformers import Gemma3ForConditionalGeneration
         print(f"[model] AutoModelForCausalLM failed ({str(e)[:80]!r}); using Gemma3ForConditionalGeneration", flush=True)
         model = Gemma3ForConditionalGeneration.from_pretrained(model_id, **kw)
+    if torch.cuda.is_available() and next(model.parameters()).device.type == "cpu":
+        # seen on a RunPod host whose GPU was visible but refused allocations ("busy or unavailable")
+        raise RuntimeError("a GPU is visible but the model was loaded on the CPU: test torch.ones(1, device='cuda')")
     model.eval()
     info = {"dtype_resolved": str(dt).replace("torch.", ""), "quant": quant,
             "revision_resolved": resolve_revision(model_id, revision, model),
@@ -75,7 +78,8 @@ def count_params(model_id, revision=None):
         import struct
         from pathlib import Path
         from huggingface_hub import snapshot_download
-        folder = Path(snapshot_download(model_id, revision=revision, allow_patterns=["*.safetensors"]))
+        folder = (Path(model_id) if Path(model_id).is_dir()  # a local checkpoint, e.g. a merged LoRA model
+                  else Path(snapshot_download(model_id, revision=revision, allow_patterns=["*.safetensors"])))
         total = 0
         for f in folder.glob("*.safetensors"):
             with open(f, "rb") as fh:
@@ -115,7 +119,7 @@ def resolve_revision(model_id, revision, model):
         return None
 
 
-def render(tok, turns, chat, answer_word=None):
+def render(tok, turns, chat, answer_word=None, thinking=False):
     """Exact text fed to the model. turns = ((role, text), ...) from prompts.build(); the last turn is the user turn
     being answered; assistant turns hold an example's answer label.
     answer_word set (label scoring): the reply is pre-filled so that the NEXT token is the label:
@@ -123,7 +127,8 @@ def render(tok, turns, chat, answer_word=None):
       raw : the prompt already ends with "<answer_word>:"; a space is appended
     The trailing space matters: Gemma encodes " 2" as a space token + "2". Without the pre-fill Gemma-3-4B-it starts
     its reply with "වැඩිම ගැළපෙන පිළිතුර: ..." or "**" and only ~5% of the probability is on the labels; with it, ~100%.
-    answer_word None (generation): no pre-fill."""
+    answer_word None (generation): no pre-fill.
+    thinking: templates with a thinking switch (Qwen3.5) get enable_thinking=thinking; off by default."""
     if isinstance(turns, str):
         turns = (("user", turns),)
     if not chat:
@@ -133,7 +138,7 @@ def render(tok, turns, chat, answer_word=None):
         return out + (" " if answer_word else "")
     kw = dict(tokenize=False, add_generation_prompt=True, date_string=FIXED_DATE)
     if "enable_thinking" in (tok.chat_template or ""):
-        kw["enable_thinking"] = False
+        kw["enable_thinking"] = thinking
     msgs = [{"role": r, "content": f"{answer_word}: {t}" if r == "assistant" and answer_word else t} for r, t in turns]
     return tok.apply_chat_template(msgs, **kw) + (f"{answer_word}: " if answer_word else "")
 
@@ -172,8 +177,8 @@ class LM:
     def device(self):
         return next(self.model.parameters()).device
 
-    def render(self, prompt, answer_word=None):
-        return render(self.tok, prompt, self.chat, answer_word)
+    def render(self, prompt, answer_word=None, thinking=False):
+        return render(self.tok, prompt, self.chat, answer_word, thinking)
 
     def encode(self, texts):
         # chat templates already contain BOS; raw text gets it from the tokenizer
@@ -270,9 +275,11 @@ class LM:
                 self._oom_safe(run, idx)
         return out
 
-    def generate(self, prompts, max_new_tokens, rendered=False, sample_seed=None, temperature=0.7, top_p=0.95):
+    def generate(self, prompts, max_new_tokens, rendered=False, sample_seed=None, temperature=0.7, top_p=0.95,
+                 on_done=None):
         """Greedy decoding (deterministic) by default. With sample_seed: nucleus sampling, reseeded per batch from
         sample_seed + the batch's first index, so a rerun on the same hardware gives the same texts.
+        on_done(i, text) is called as each batch finishes (the caller can save progress; batching is unchanged).
         Returns the generated text only."""
         import torch
         texts = list(prompts) if rendered else [self.render(p) for p in prompts]
@@ -291,6 +298,8 @@ class LM:
             g = self.model.generate(**enc, max_new_tokens=max_new_tokens, pad_token_id=pad, **decoding)
             for row, j in enumerate(idx):
                 out[j] = self.tok.decode(g[row, enc["input_ids"].shape[1]:], skip_special_tokens=True).strip()
+                if on_done:
+                    on_done(j, out[j])
 
         with torch.no_grad():
             for idx in self._batches(ids_all, self.gen_batch_size, f"generate {len(ids_all)} (<= {max_new_tokens} tokens)"):

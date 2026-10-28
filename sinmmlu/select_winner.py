@@ -4,7 +4,7 @@ Rule: on the confirmation set, a candidate is adopted only if it beats the basel
 exact McNemar p < 0.05 (over all candidates); the adopted candidate with the highest accuracy wins. If none is
 adopted, the baseline is the winner.
 
-  python -m sinmmlu.select_winner --data dev/inference_rest.jsonl --baseline <exp_id> --candidates <exp_id> ...
+  python -m sinmmlu.select_winner --data dev/archive/inference_rest.jsonl --baseline <exp_id> --candidates <exp_id> ...
 Writes results/winner_<data stem>.json: winner exp_id, how to rebuild it on the test set (prompt or ensemble parts),
 and the full comparison table.
 """

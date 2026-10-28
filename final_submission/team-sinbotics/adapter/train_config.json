@@ -1,0 +1,63 @@
+{
+  "base": {
+    "name": "qwen35_4b",
+    "model": "Qwen/Qwen3.5-4B",
+    "revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+    "chat_capable": true,
+    "dtype": "auto",
+    "quant": "none",
+    "batch_size": 16,
+    "gen_batch_size": 48,
+    "seed": 42
+  },
+  "base_info": {
+    "dtype_resolved": "bfloat16",
+    "quant": "none",
+    "revision_resolved": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+    "n_params_total": 4659865088,
+    "context_length": 262144
+  },
+  "args": {
+    "model": "configs/models/qwen35_4b.yaml",
+    "train": "data/combined_si/competition_format_val10/train.json",
+    "out": "models/qwen35_4b_lora_combined",
+    "prompt": "en_instr_nosubject",
+    "rank": 16,
+    "alpha": 32,
+    "dropout": 0.05,
+    "lr": 0.0001,
+    "warmup": 0.03,
+    "epochs": 1,
+    "batch": 32,
+    "max_batch_tokens": 12288,
+    "max_len": 1024,
+    "val": "data/combined_si/competition_format_val10/val.json",
+    "val_from": "gsi14040",
+    "val_every": 50,
+    "max_steps": null,
+    "limit": null,
+    "no_merge": false,
+    "init_adapter": null,
+    "shuffle_seed": null
+  },
+  "train_file": "data/combined_si/competition_format_val10/train.json",
+  "n_train": 25799,
+  "n_dropped_long": 876,
+  "n_val": 2745,
+  "steps": 807,
+  "lora_trainable_params": 30474240,
+  "target_modules": "(.*language_model.*|model\\.layers\\.\\d+\\..*)\\.(q_proj|k_proj|v_proj|o_proj|gate_proj|up_proj|down_proj|in_proj_qkv|in_proj_z|out_proj)",
+  "train_seconds": 31612,
+  "env": {
+    "python": "3.12.3",
+    "git_rev": null,
+    "torch": "2.8.0+cu128",
+    "transformers": "5.18.0",
+    "accelerate": "1.15.0",
+    "bitsandbytes": "0.50.2",
+    "peft": "0.21.1",
+    "cuda": "12.8",
+    "gpu": "NVIDIA GeForce RTX 3090"
+  },
+  "merged": true
+}

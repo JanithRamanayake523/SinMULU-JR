@@ -1,6 +1,6 @@
 """Analysis only (never used at inference): negation questions and translation quality. Dev data only.
 
-  python -m sinmmlu.negation --data dev/inference_subset.jsonl [--samples 20]
+  python -m sinmmlu.negation --data dev/archive/inference_subset.jsonl [--samples 20]
 1. Accuracy of every finished experiment on questions with / without a Sinhala negation word (the paper names
    negation as a main difficulty).
 2. For each cached translator: of the questions with a negation word, how many English translations still contain
