@@ -2,7 +2,7 @@
 # Submission 2 (2026-10-24 evening): confirm two candidates on the 1,483 held-out questions against the current
 # winner (cot_en_role, 512 tokens, 45.6%), select by the rule (>= 1 point, Holm p < 0.05; if none passes: the
 # 1,024-token version, which only fixes cut-off answers), then run the selected system on the 2,238 test questions.
-#   bash runpod/experiments/confirm2.sh
+#   bash scripts/experiments/confirm2.sh
 set -uo pipefail
 cd "$(dirname "$0")/../.."
 export HF_HOME="${SINMULU_HF_HOME:-/workspace/hf_cache}" PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false

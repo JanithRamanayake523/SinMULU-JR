@@ -7,4 +7,4 @@ T=outputs/qwen35_4b_lora_combined__none__cot_en_role_think__chaton__p1__c0__trno
 [ -f $S/predictions.zip ] || { echo "subset run did not finish"; exit 1; }
 mkdir -p $T; [ -f $T/generations.jsonl ] || cp $S/generations.jsonl $T/generations.jsonl
 wc -l $T/generations.jsonl
-bash runpod/think_1028.sh test
+bash scripts/final/think_1028.sh test

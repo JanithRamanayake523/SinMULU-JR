@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "If you use this code or the sinmulu_si collection, please cite it as below."
+title: "SinMULU-JR: Team SinBotics' system for the Sinhala MMLU Shared Task (ICTer 2026)"
+type: software
+license: MIT
+repository-code: "https://github.com/JanithRamanayake523/SinMULU-JR"
+authors:
+  - family-names: Weththasinghe
+    given-names: Sachintha
+    affiliation: SLIIT
+  - family-names: Hirushan
+    given-names: Hasitha
+    affiliation: SLIIT
+  - family-names: Saadhiq
+    given-names: Hasaan
+    affiliation: SLIIT
+  - family-names: Ramanayake
+    given-names: Janith
+    affiliation: University of Moratuwa
+keywords:
+  - Sinhala
+  - MMLU
+  - low-resource languages
+  - LoRA
+  - reasoning

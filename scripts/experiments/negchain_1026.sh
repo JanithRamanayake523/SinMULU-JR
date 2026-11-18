@@ -2,7 +2,7 @@
 # Negation-consistency chain on the 280-question subset (2026-10-26):
 #   reference = cot_en_role at 1,024 tokens (the submitted system); candidate = cot_en_role_negchain
 #   (all correct options -> opposite question -> one final answer). Rule: >= +2 points on the subset to confirm.
-#   bash runpod/experiments/negchain_1026.sh
+#   bash scripts/experiments/negchain_1026.sh
 set -uo pipefail
 cd "$(dirname "$0")/../.."
 export HF_HOME="${SINMULU_HF_HOME:-/workspace/hf_cache}" PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false

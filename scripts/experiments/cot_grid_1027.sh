@@ -2,7 +2,7 @@
 # Reasoning-prompt grid (2026-10-27): cot_si and cot_en, 1,024 tokens, on the 280-question subset, for adapters B1
 # (sinmulu_si r16 epoch 1) and A (Global-MMLU r16 epoch 1), then the base model as reference, all on the same GPU. Each merged model is built from its adapter just before its runs and deleted
 # after them (disk). Already done on this GPU and reused: cot_en_role for base, B1, B2.
-#   bash runpod/experiments/cot_grid_1027.sh
+#   bash scripts/experiments/cot_grid_1027.sh
 set -uo pipefail
 cd "$(dirname "$0")/../.."
 export HF_HOME="${SINMULU_HF_HOME:-/workspace/hf_cache}" PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false

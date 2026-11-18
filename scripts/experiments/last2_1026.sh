@@ -3,7 +3,7 @@
 #  1. option-order averaging with reasoning: cot_en_role at 1,024 tokens under 2 cyclic option orders, averaged
 #  2. ensemble of the three confirmed English-reasoning prompts, all at 1,024 tokens
 # Rule: >= +2 points on the subset to go to the confirmation set.
-#   bash runpod/experiments/last2_1026.sh      (needs dev/archive/fewshot_cot_en.jsonl, the worked examples made on 24 Oct)
+#   bash scripts/experiments/last2_1026.sh      (needs dev/archive/fewshot_cot_en.jsonl, the worked examples made on 24 Oct)
 set -uo pipefail
 cd "$(dirname "$0")/../.."
 export HF_HOME="${SINMULU_HF_HOME:-/workspace/hf_cache}" PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false

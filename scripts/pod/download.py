@@ -1,8 +1,8 @@
 """Download the models of the given waves into $HF_HOME (fail fast on gated models before a long run).
 
-  python runpod/download.py final                # the final system: Qwen/Qwen3.5-4B (pinned revision, not gated)
-  python runpod/download.py gemma                # submissions 1-2 and the Gemma LoRA runs: gemma-3-4b-it
-  python runpod/download.py wave1 wave2 wave3    # all models of the screening study
+  python scripts/pod/download.py final                # the final system: Qwen/Qwen3.5-4B (pinned revision, not gated)
+  python scripts/pod/download.py gemma                # submissions 1-2 and the Gemma LoRA runs: gemma-3-4b-it
+  python scripts/pod/download.py wave1 wave2 wave3    # all models of the screening study
 Gated models (Gemma) need HF_TOKEN in the environment (read by huggingface_hub; never written to disk by this script)
 and the licence accepted on huggingface.co for that account.
 """

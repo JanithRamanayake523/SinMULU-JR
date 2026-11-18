@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # LoRA on Global-MMLU Sinhala (2026-10-27): screening on the 280-question subset, both models on the same GPU.
-#   bash runpod/experiments/lora_1027.sh          (after python -m sinmmlu.train_lora ... --out models/gemma3_4b_it_lora_gmmlu)
+#   bash scripts/experiments/lora_1027.sh          (after python -m sinmmlu.train_lora ... --out models/gemma3_4b_it_lora_gmmlu)
 # Conditions: submission 2 (cot_en_role, 1,024 tokens) and the plain digit prompt the adapter was trained with
 # (en_instr_nosubject), each for the base model and the merged LoRA model.
 # Rule: >= +2 points over the base model's cot_en_role on the subset to go to the confirmation set.

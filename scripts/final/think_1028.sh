@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Thinking mode (cot_en_role_think, 4,096 tokens) with the Qwen3.5-4B combined-data LoRA (2026-10-28, A100 40 GB).
-#   bash runpod/think_1028.sh [subset|test]      (default: subset = dev/test_subset300.jsonl)
+#   bash scripts/final/think_1028.sh [subset|test]      (default: subset = dev/test_subset300.jsonl)
 # Needs lora_adapters/qwen3.5-4b_lora_combined-si_epoch1/adapter; merges it first if models/ has no merged copy.
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 export HF_HOME="${SINMULU_HF_HOME:-/workspace/hf_cache}" PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false
 mkdir -p logs
 python - <<'PY'

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Adapter B (sinmulu_si), epochs 1 and 2, vs the base model on the 280-question subset, all on the same GPU (2026-10-27).
-#   bash runpod/experiments/loraB_1027.sh
+#   bash scripts/experiments/loraB_1027.sh
 # Main condition: submission 2 (cot_en_role, 1,024 tokens); also the plain digit prompt the adapters were trained with.
 # Rule: >= +2 points over the base model's cot_en_role on the subset to go to the confirmation set.
 set -uo pipefail

@@ -1,10 +1,19 @@
 # SinMULU-JR: Team SinBotics' system for the Sinhala MMLU Shared Task (ICTer 2026)
 
-**Final system:** [Qwen/Qwen3.5-4B](https://huggingface.co/Qwen/Qwen3.5-4B) + our LoRA adapter (rank 16, one epoch on Global-MMLU Sinhala + sinmulu_si), with English teacher-role reasoning in Qwen's thinking mode. It has 4.24B parameters at inference.
+**Research question:** can a small (<= 8B) open model answer Sinhala school-exam questions better if it reasons in English, and what else (translation, scoring, prompts, fine-tuning, thinking mode) changes the result? We ran about 70 configurations in four phases and report what helped and what did not, with the data, code and commands to reproduce each result.
+
+**Main findings** (details in [`report/`](report/) and [`docs/log.md`](docs/log.md)):
+- English reasoning over the untranslated Sinhala question was the largest inference-time gain on Gemma-3-4B-it (38.2 -> 45.6% on 1,483 held-out questions, +7.4 points).
+- Real exam questions (our `sinmulu_si` collection) taught a LoRA adapter more than translated Global-MMLU (validation +6.2 vs +1.4 points), but the gain did not reliably carry over to reasoning prompts.
+- Switching the base model to Qwen3.5-4B (+7.4) and turning on its thinking mode (+4.7) mattered most. Final system: Qwen3.5-4B + rank-16 LoRA, 4.24B parameters, Macro Avg 57.58 on the shared-task leaderboard (11th place).
+- Most other ideas (translation, few-shot, option-order averaging, negation chains, ensembles) gave no confirmed gain.
+
+Each reported number is mapped to its command and results file in [`docs/reproduce.md`](docs/reproduce.md).
 Submission repo: [SinhalaMMLU-SharedTask/team-sinbotics](https://huggingface.co/SinhalaMMLU-SharedTask/team-sinbotics). Its mirror is in [`final_submission/team-sinbotics/`](final_submission/team-sinbotics/), without the weights.
 
-Task rules:
-- ≤ 8B parameters at inference, counting every component (LoRA included);
+## Shared-task setting
+Sinhala MMLU Shared Task @ ICTer 2026. Rules:
+- <= 8B parameters at inference, counting every component (LoRA included);
 - open weights released before 2026-10-01;
 - no retrieval;
 - closed APIs only for creating training data, and disclosed;
@@ -12,7 +21,7 @@ Task rules:
 
 Metric: macro average of Easy / Medium / Hard accuracy.
 
-## System
+## Final system
 1. **Data.** Global-MMLU Sinhala and sinmulu_si (our collection of Sri Lankan exam questions; its overlap with the test set was removed) are combined, with a 10% validation set per subject: `sinmmlu/gmmlu.py`, `sinmulu.py`, `combined.py`.
 2. **Fine-tuning.** LoRA rank 16 on Qwen3.5-4B. The loss is on the answer digit only, after a plain prompt pre-filled with "Answer: ". One epoch (807 steps) took 8.8 h on an RTX 3090. Validation accuracy went from 44.4% to 54.8%. Code: `sinmmlu/train_lora.py`, `merge_lora.py`.
 3. **Inference.** The prompt `cot_en_role_think`: "You are an expert Sri Lankan teacher of {subject} … think step by step in English", with the Sinhala question as given. Qwen's thinking mode is on, decoding is greedy with at most 4,096 new tokens, and the answer is the argmax over the digit tokens after "Answer: ". Code: `sinmmlu/prompts.py`, `model.py`, `evaluate.py`; standalone version: `final_submission/team-sinbotics/inference.py`.
@@ -37,12 +46,13 @@ sinmmlu/                 the package (run every module as python -m sinmmlu.<mod
                          earlier experiments and tools (translation, negation, question types, worked examples, ...)
 configs/models/          one YAML per model (base models, merged LoRA models)
 configs/subsets/         uid lists of the dev splits
-runpod/                  pod setup, model download, the final training / inference scripts (see runpod/README.md)
-runpod/experiments/      the scripts of the earlier experiment rounds (dated)
+scripts/final/           training and inference of the final system (see scripts/README.md)
+scripts/pod/             GPU-pod setup, model download, speed test, packing results
+scripts/experiments/     the scripts of the earlier experiment rounds (dated)
 final_submission/        mirror of the Hugging Face submission repo (inference.py, README, training code; no weights)
 tests/                   offline tests (no model): python -m pytest -q
 report/                  submitted system description report (ACL LaTeX + PDF), appendices, slides, presenter notes
-results/                 results.csv (one row per dev experiment), dedup report
+results/                 dedup report; phase-0 results; raw pod outputs (one results.csv per round)
 results/phase0_1b/       results of the phase-0 (<= 1B models) pipeline tests
 results/runpod/          raw pod outputs per round: 2026-10-24_25, 2026-10-26, 2026-10-27 (gitignored)
 docs/log.md              lab notebook: decisions and results, newest first
@@ -58,7 +68,7 @@ gitignored               data/ dev/ outputs/ cache/ models/ lora_adapters/ logs/
 pip install -r requirements.txt          # torch 2.8 separately; then: pip install causal-conv1d==1.7.0 --no-build-isolation
 python -m pytest -q
 python -m sinmmlu.combined               # training data (sinmulu_si.json from huggingface.co/datasets/JaniRaviRash-523/sinmulu-si in data/sinmulu_si/)
-bash runpod/train_qwen_combined_1028.sh  # Qwen3.5-4B download + LoRA training -> models/qwen35_4b_lora_combined/
+bash scripts/final/train_qwen_combined_1028.sh  # Qwen3.5-4B download + LoRA training -> models/qwen35_4b_lora_combined/
 python -m sinmmlu.evaluate --model configs/models/qwen35_4b_lora_combined.yaml --data test \
     --prompt cot_en_role_think --chat on --max-new-tokens 4096
 ```

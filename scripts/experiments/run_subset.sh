@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Screening study on dev/archive/inference_subset.jsonl (280 questions, 20 per subject). Every step skips finished
 # experiments, so a wave can simply be restarted after a crash or a pod restart.
-#   bash runpod/experiments/run_subset.sh smoke      # 8 questions through every code path (~5 min), no results rows
-#   bash runpod/experiments/run_subset.sh wave1      # prompts, scoring, precision, model references
-#   bash runpod/experiments/run_subset.sh wave2      # few-shot, translation (NLLB, self-translation)
-#   bash runpod/experiments/run_subset.sh wave3      # reasoning (Sinhala / English), MADLAD translation
-#   bash runpod/experiments/run_subset.sh report     # comparison table + per-subject accuracy
+#   bash scripts/experiments/run_subset.sh smoke      # 8 questions through every code path (~5 min), no results rows
+#   bash scripts/experiments/run_subset.sh wave1      # prompts, scoring, precision, model references
+#   bash scripts/experiments/run_subset.sh wave2      # few-shot, translation (NLLB, self-translation)
+#   bash scripts/experiments/run_subset.sh wave3      # reasoning (Sinhala / English), MADLAD translation
+#   bash scripts/experiments/run_subset.sh report     # comparison table + per-subject accuracy
 # Log: logs/<wave>_<time>.log; failed steps are listed in logs/failed.txt and do not stop the wave.
 set -uo pipefail
 cd "$(dirname "$0")/../.."

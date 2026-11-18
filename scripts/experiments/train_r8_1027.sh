@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Adapter C (2026-10-27): sinmulu_si (10% validation split), rank 8, alpha 16, dropout 0.1, fresh, 1 epoch. Waits for a running train_lora first.
-#   bash runpod/experiments/train_r8_1027.sh
+#   bash scripts/experiments/train_r8_1027.sh
 cd "$(dirname "$0")/../.."
 export HF_HOME="${SINMULU_HF_HOME:-/workspace/hf_cache}" PYTHONUNBUFFERED=1
 [ -f data/sinmulu_si/competition_format_val10/train.json ] || python -m sinmmlu.sinmulu --val-fraction 0.10

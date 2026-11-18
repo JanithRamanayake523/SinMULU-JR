@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Qwen3.5-4B LoRA (rank 16) on Global-MMLU si + sinmulu_si combined, 10% validation (2026-10-28, RTX 3090 24 GB).
-#   bash runpod/train_qwen_combined_1028.sh
+#   bash scripts/final/train_qwen_combined_1028.sh
 # Downloads the pinned model first; 12,288-token micro-batches to fit 24 GB.
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 export HF_HOME="${SINMULU_HF_HOME:-/workspace/hf_cache}" PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false
 mkdir -p logs
 python - <<'PY'

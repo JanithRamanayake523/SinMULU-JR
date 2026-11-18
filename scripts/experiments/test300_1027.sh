@@ -2,7 +2,7 @@
 # Answer files for the level-balanced test subset dev/test_subset300.jsonl (2026-10-27): adapters B1 (sinmulu_si r16
 # epoch 1) and A (Global-MMLU r16 epoch 1), prompts cot_si and cot_en, 1,024 tokens. No answers are known here: each run
 # writes outputs/<exp_id>/predictions.jsonl/.zip (300 lines) for scoring outside this code.
-#   bash runpod/experiments/test300_1027.sh
+#   bash scripts/experiments/test300_1027.sh
 set -uo pipefail
 cd "$(dirname "$0")/../.."
 export HF_HOME="${SINMULU_HF_HOME:-/workspace/hf_cache}" PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # After `run_subset.sh confirm`: apply the pre-registered rule on the 1,483 confirmation questions, then run the
 # winner on the 2,238 public test questions -> outputs/<exp>/predictions.zip (Codabench upload is manual).
-#   bash runpod/experiments/select_and_test.sh
+#   bash scripts/experiments/select_and_test.sh
 set -uo pipefail
 cd "$(dirname "$0")/../.."
 export HF_HOME="${SINMULU_HF_HOME:-/workspace/hf_cache}" PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Label mass and accuracy on the first N subset questions with the answer pre-fill built into scoring, for the main
-# prompt families (dev data only). Usage: bash runpod/experiments/probe_prefill.sh [N]
+# prompt families (dev data only). Usage: bash scripts/experiments/probe_prefill.sh [N]
 set -uo pipefail
 cd "$(dirname "$0")/../.."
 export HF_HOME="${SINMULU_HF_HOME:-/workspace/hf_cache}"

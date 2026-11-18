@@ -105,7 +105,7 @@ Side-by-side file: outputs/analysis/translations_inference_subset.md on the pod.
 
 ## 2026-10-24: correction: parameter counts
 count_params summed meta-device parameters without tying, so tied embeddings were counted twice. Counted from the
-stored safetensors (runpod/count_params.py): Gemma-3-4B-it/pt **4,300,079,472** (vision tower 419,816,304), MADLAD-400-3B
+stored safetensors (scripts/pod/count_params.py): Gemma-3-4B-it/pt **4,300,079,472** (vision tower 419,816,304), MADLAD-400-3B
 **2,940,374,016** (its lm_head is stored untied), NLLB-200-distilled-600M **615,073,792** (unique tensors; its .bin stores
 the tied embedding several times: 1,402,138,624 stored values). **Gemma + MADLAD = 7.24B <= 8B: the earlier statement that
 MADLAD is over the limit was wrong.** It does not change the selection (MADLAD-en 43.9% on the subset, below cot_en, and
@@ -175,7 +175,7 @@ Nothing survives Holm at n=280; promoted to confirmation: pt base, role_subject_
 - New: few-shot pool (`dev/fewshot_pool.jsonl`, 5 per subject, first four cover all four answers; taken out of
   `inference_rest`, now 1,483), prompts B4-B7 / cloze / reasoning / translated (prompts.py), letter labels,
   `LM` wrapper (label scoring, cloze, batched greedy generation), `translate.py` (NLLB, MADLAD, self), `ensemble.py`,
-  `runpod/` (setup, download, run_subset.sh smoke|wave1|wave2|wave3|report, pack).
+  `scripts/` (setup, download, run_subset.sh smoke|wave1|wave2|wave3|report, pack).
 - Reasoning runs: greedy generation, then the stated answer is cut and the label probabilities are scored after the
   answer cue, so every question gets probabilities; parse rate and agreement with the stated answer are recorded.
 - 29 offline tests pass, including a fake bigram model that checks label and cloze scoring against an unbatched

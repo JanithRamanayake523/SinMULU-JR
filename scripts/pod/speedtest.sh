@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Network check for a new pod, BEFORE installing or downloading anything (writes nothing outside /tmp).
-#   bash runpod/speedtest.sh
+#   bash scripts/pod/speedtest.sh
 # Good pod: Python packages >= 5 MB/s and Hugging Face >= 50 MB/s (Gemma-3-4B-it, 8.6 GB, then downloads in ~3 min).
 set -u
 T=$(mktemp -d)

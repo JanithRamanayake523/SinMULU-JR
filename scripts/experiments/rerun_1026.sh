@@ -3,7 +3,7 @@
 #  1. reproduce submission 2 (cot_en_role, 1,024 tokens) on the 2,238 test questions; compare with the saved file
 #     (submissions/2026-10-24_cot_en_role_mt1024/predictions.jsonl, copied to the pod as reference/)
 #  2. the same system plus the baseline on the 1,483 confirmation questions -> per-subject and per-type tables
-#   bash runpod/experiments/rerun_1026.sh          (after runpod/setup.sh)
+#   bash scripts/experiments/rerun_1026.sh          (after scripts/pod/setup.sh)
 set -uo pipefail
 cd "$(dirname "$0")/../.."
 export HF_HOME="${SINMULU_HF_HOME:-/workspace/hf_cache}" PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false
