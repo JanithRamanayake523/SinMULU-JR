@@ -10,12 +10,12 @@ pip install causal-conv1d==1.7.0 --no-build-isolation
 | Step | Command | Output |
 |---|---|---|
 | Global-MMLU Sinhala: download a fixed revision (`CohereLabs/Global-MMLU`, `si`, rev `0e619dbe…`), drop 3 questions with an empty option, convert to the competition format, ids `gsi…`, 10% validation per subject (seed 42) | `python -m sinmmlu.gmmlu --val-fraction 0.10` | `data/global_mmlu_si/competition_format_val10/{train,val}.json` (12,926 / 1,398) |
-| sinmulu_si (our collection, 15,190 questions; expected at `data/sinmulu_si/sinmulu_si.json`): remove 10 duplicates (same question and options), 10% validation per subject (seed 42) | `python -m sinmmlu.sinmulu --val-fraction 0.10` | `data/sinmulu_si/competition_format_val10/{train,val}.json` (13,749 / 1,431) |
+| sinmulu_si (our collection, 15,190 questions, [published here](https://huggingface.co/datasets/JaniRaviRash-523/sinmulu-si); expected at `data/sinmulu_si/sinmulu_si.json`): remove 10 duplicates (same question and options), 10% validation per subject (seed 42) | `python -m sinmmlu.sinmulu --val-fraction 0.10` | `data/sinmulu_si/competition_format_val10/{train,val}.json` (13,749 / 1,431) |
 | Combined training set (union of the two; any validation question whose text also appears in training moves to training, 0 here) | `python -m sinmmlu.combined` (runs the two steps above if needed) | `data/combined_si/competition_format_val10/{train,val}.json` (26,675 / 2,829) |
 
 Fields: `q_no`, `subject`, `question`, `choices` (4), `answer` ("1"–"4").
 
-**sinmulu_si is not included in this repo:** our team plans to publish it separately. It is available to the organisers on request. Without it, the Global-MMLU step runs as is, and the trained adapter is published (`../adapter/`), so inference does not depend on it.
+**sinmulu_si is published separately** at [JaniRaviRash-523/sinmulu-si](https://huggingface.co/datasets/JaniRaviRash-523/sinmulu-si); put `sinmulu_si.json` in `data/sinmulu_si/`. The Global-MMLU step runs as is, and the trained adapter is published (`../adapter/`), so inference does not depend on it.
 
 ## 2. LoRA fine-tuning
 ```bash

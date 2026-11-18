@@ -20,9 +20,9 @@ tags:
 - **Total inference parameters:** **4.24B**. This is the text model of Qwen3.5-4B (4,205,751,296) plus the LoRA adapter (30,474,240); the adapter is merged into the weights, so the loaded model has 4,205,751,296. The full Qwen3.5-4B checkpoint, including the vision tower we don't load, has 4,659,865,088. Either way, it is ≤ 8B.
 - **Extra data used for training:**
   - [Global-MMLU](https://huggingface.co/datasets/CohereLabs/Global-MMLU), Sinhala subset `si` (Apache-2.0), revision `0e619dbeb34206cd48705a1a0ea7fb21cae09993`: test and dev splits, 14,324 questions after removing 3 with an empty option.
-  - **sinmulu_si**: our own collection of 15,190 Sri Lankan Sinhala multiple-choice questions, gathered by our team; 15,180 after removing duplicates. Before training, it was checked against the 2,238 shared-task test questions, and 165 overlapping questions were removed (see *Overlap check against the test set*). We plan to publish it separately, so it is **not included** in this repo; it is available to the organisers on request.
+  - **sinmulu_si**: our own collection of 15,190 Sri Lankan Sinhala multiple-choice questions, gathered by our team; 15,180 after removing duplicates. Before training, it was checked against the 2,238 shared-task test questions, and 165 overlapping questions were removed (see *Overlap check against the test set*). It is published at [JaniRaviRash-523/sinmulu-si](https://huggingface.co/datasets/JaniRaviRash-523/sinmulu-si).
   - Together: 26,675 training and 2,829 validation questions (10% per subject, seed 42); see `training/README.md`.
-  - **How sinmulu_si was digitised:** the exam papers were scanned PDFs in legacy fonts, so their pages were transcribed to text with **Claude Sonnet 5.5** (Anthropic, closed API; used only to create training data, never at inference). Where no official marking scheme was available, the answer was labelled by the model and kept only when it was highly confident (see Datasets).
+  - **How sinmulu_si was digitised:** the exam papers were scanned PDFs in legacy fonts, so their pages were transcribed to text with **Claude Sonnet 5.5** (Anthropic, closed model, via Claude Code; used only to create training data, never at inference). Where no official marking scheme was available, the answer was labelled by the model and kept only when it was highly confident (see Datasets).
   - **At inference,** only our open-weight system above is used (≤ 8B parameters), with no external LLM, API or retrieval.
 
 ## Models and resources in this submission
@@ -38,7 +38,7 @@ tags:
 | Dataset | Source / licence | Questions | Train / validation |
 |---|---|---|---|
 | **Global-MMLU, Sinhala** | [`CohereLabs/Global-MMLU`](https://huggingface.co/datasets/CohereLabs/Global-MMLU) (`si`), Apache-2.0 | 14,324 | 12,926 / 1,398 |
-| **sinmulu_si** (our own) | Sri Lankan exam papers; not published here (available on request) | 15,180 | 13,749 / 1,431 |
+| **sinmulu_si** (our own) | [JaniRaviRash-523/sinmulu-si](https://huggingface.co/datasets/JaniRaviRash-523/sinmulu-si), from Sri Lankan exam papers | 15,180 | 13,749 / 1,431 |
 | **Combined** (final adapter) | union of the two | 29,504 | 26,675 / 2,829 |
 
 Validation sets are 10% per subject (seed 42).
@@ -51,7 +51,7 @@ Validation sets are 10% per subject (seed 42).
 **sinmulu_si** (`training/sinmmlu/sinmulu.py`)
 - **Source:** built by our team from 3,486 Sri Lankan exam-paper PDFs: G.C.E. O/L and A/L papers and provincial term tests.
 - **Transcription:**
-  - Most PDFs use legacy Sinhala fonts, so text extraction was unusable. Instead, each page was rendered as an image and transcribed by **Claude Sonnet 5.5** (Anthropic API).
+  - Most PDFs use legacy Sinhala fonts, so text extraction was unusable. Instead, each page was rendered as an image and transcribed by **Claude Sonnet 5.5** (Anthropic, via Claude Code, medium effort).
   - This ran in batches, with several agents working in parallel on separate slices.
   - Stems and options were copied verbatim.
 - **Selection:**
@@ -65,7 +65,7 @@ Validation sets are 10% per subject (seed 42).
 - **Final set:**
   - After the overlap check against the test set (below), 15,190 remain (`osi00001`–`osi15190`). Removing 10 more duplicates (same question and options) leaves 15,180.
   - Largest subjects: Agricultural Science 990, Home Economics 971, Biology 944, ICT 890, Communication and Media Studies 860, History 779.
-- **Availability:** we will publish it separately; it is available to the organisers on request.
+- **Availability:** published at [JaniRaviRash-523/sinmulu-si](https://huggingface.co/datasets/JaniRaviRash-523/sinmulu-si).
 
 **Combined** (`training/sinmmlu/combined.py`)
 - A validation question whose text also appeared in training would have been moved to training; none did.
@@ -88,7 +88,7 @@ Real exam papers can repeat questions, so before training we checked sinmulu_si 
 
 The cleaning therefore relies on manual judgement, not on a similarity cut-off, and it **does not prove zero leakage**. The check used only the test questions and choices, no answers.
 
-All training data use the competition format: `q_no`, `subject`, `question`, `choices` (4 options), `answer` ("1"–"4"). Apart from the Claude Sonnet 5.5 transcription and model-derived answers in sinmulu_si described above (closed API, training data only), we used no synthetic data and no retrieval corpus.
+All training data use the competition format: `q_no`, `subject`, `question`, `choices` (4 options), `answer` ("1"–"4"). Apart from the Claude Sonnet 5.5 transcription and model-derived answers in sinmulu_si described above (closed model, training data only), we used no synthetic data and no retrieval corpus.
 
 ## System in detail
 
@@ -211,6 +211,7 @@ python inference.py
 | | |
 |---|---|
 | Questions | 2,238 (easy 642, medium 1,111, hard 485) |
+| **Codabench leaderboard** | **Macro Avg 57.58%** (Easy 54.67, Medium 52.30, Hard 65.77) |
 | Hardware | 1× NVIDIA A100-SXM4 40 GB, CUDA 12.8, Python 3.12, torch 2.8.0, transformers 5.18.0, peft 0.21.1, flash-linear-attention 0.4.0, causal-conv1d 1.7.0 |
 | Settings | bf16, generation batch 48, scoring batch 16, greedy, at most 4,096 new tokens, seed 42 |
 | Answer stated in the reasoning | 56.0% of questions; the rest hit the 4,096-token limit and are read off after the cue |

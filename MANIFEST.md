@@ -19,7 +19,7 @@ Inference budget of the final system: Qwen3.5-4B text model + LoRA = 4.24B (limi
 | Public train (1,851 Q, Easy, answers) | evaluation (dev) only | task data | Geography q_no 64 label fixed to 3; 18 items near-duplicate test items (`overlaps_test`) |
 | Public test (2,238 Q, no answers) | predictions only | no redistribution | never trained on |
 | Global-MMLU, Sinhala (`CohereLabs/Global-MMLU`, `si`, rev 0e619dbeb34206cd48705a1a0ea7fb21cae09993) | LoRA training | Apache-2.0 | 14,324 Q (3 with an empty option dropped); 12,926 train / 1,398 val |
-| sinmulu_si (our collection) | LoRA training | ours; published separately | Built from 3,486 Sri Lankan exam-paper PDFs (O/L, A/L, provincial term tests); 15,355 Q → 15,190 after removing 165 overlaps with the test set (manual review of TF-IDF / difflib candidates) → 15,180 after removing 10 duplicates; 13,749 train / 1,431 val |
+| sinmulu_si (our collection) | LoRA training | ours; published at https://huggingface.co/datasets/JaniRaviRash-523/sinmulu-si (licence unknown: exam-paper rights stay with their authors) | Built from 3,486 Sri Lankan exam-paper PDFs (O/L, A/L, provincial term tests); 15,355 Q → 15,190 after removing 165 overlaps with the test set (manual review of TF-IDF / difflib candidates) → 15,180 after removing 10 duplicates; 13,749 train / 1,431 val |
 | naist-nlp/SinhalaMMLU (HF) | **not accessed** | CC BY-NC-ND 4.0, gated | its card says the shared-task Hard test set is built from it |
 
 ## Dedup (`python -m sinmmlu.dedup`, results/dedup_train_vs_test.txt)
@@ -34,6 +34,6 @@ Public / generated: remove full ≥ 0.5, review 0.35–0.5. Collected past paper
 ## Closed-API use
 | API | Use | Where disclosed |
 |---|---|---|
-| Claude Sonnet 5.5 (Anthropic) | creating training data only: transcribing the page images of the sinmulu_si exam papers, and labelling answers where no official marking scheme existed (kept only when highly confident) | submission README, this manifest, the report |
+| Claude Sonnet 5.5 (Anthropic, via Claude Code, medium effort) | creating training data only: transcribing the page images of the sinmulu_si exam papers, and labelling answers where no official marking scheme existed (kept only when highly confident) | submission README, this manifest, the report |
 
 No closed API, LLM service or retrieval is used at inference.

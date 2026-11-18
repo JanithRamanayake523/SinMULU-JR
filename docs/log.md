@@ -53,12 +53,12 @@ numeric 46.7% (43.3%), plain 48.0% (47.5%): the chain hurts exactly on negated a
   By question type (rest: negation 157, sub-option 22, blank 104, numeric 119, plain 1,123): A0 37.6 / 27.3 / 28.8 /
   35.3 / 39.2; cot_en_role 1024 50.3 / 31.8 / 35.6 / 37.0 / 46.3. Negated questions gain most from English reasoning
   (+12.7); sub-option, blank and numeric questions remain weak.
-- Results copied to runpod_results_1026/ (results, logs, outputs incl. the test reasoning texts), MD5-verified.
+- Results copied to results/runpod/2026-10-26/ (results, logs, outputs incl. the test reasoning texts), MD5-verified.
 
 ## 2026-10-25: pod terminated
 The RunPod pod was terminated (not stopped), which deleted its /workspace volume. Kept: code (git 4a4aa89),
 submissions 1 and 2 (submissions/), all summary numbers (this notebook), and raw outputs up to the first confirmation
-and test run (runpod_results/). Lost: raw per-question outputs and reasoning texts of the later runs (reasoning limits,
+and test run (results/runpod/2026-10-24_25/). Lost: raw per-question outputs and reasoning texts of the later runs (reasoning limits,
 self-consistency, ensemble, translation + reasoning, negation-check / each-option, submission-2 confirmation), the
 per-type tables, the side-by-side translation file and the translation caches. All are reproducible (greedy decoding,
 fixed seeds). Next pod: Stop instead of Terminate, and copy results before ending a session.

@@ -1,4 +1,4 @@
-% Technical report: SinMULU-JR at the Sinhala MMLU Shared Task (ICTer 2026)
+% System description: Team SinBotics at the Sinhala MMLU Shared Task (ICTer 2026)
 % Compile with XeLaTeX (Sinhala text needs fontspec + HarfBuzz):  latexmk -xelatex report.tex
 \documentclass[10pt,a4paper]{article}
 \usepackage[margin=2.2cm]{geometry}
@@ -25,39 +25,43 @@
 \newcommand{\todo}[1]{\textcolor{red}{[#1]}}
 \renewcommand{\arraystretch}{1.12}
 
-\title{\textbf{SinMULU-JR at the Sinhala MMLU Shared Task (ICTer 2026):\\
-English Reasoning over Sinhala Questions with Gemma-3-4B}\\[4pt]
-\large Technical report: data, method, every experiment, and the first submission}
-\author{Team SinMULU-JR}
-\date{24 October 2026 (leaderboard closes 27 October 2026)}
+\title{\textbf{Team SinBotics at the Sinhala MMLU Shared Task (ICTer 2026):\\
+LoRA-Tuned Qwen3.5-4B Thinking in English about Sinhala Questions}\\[4pt]
+\large System description: data, method, every experiment, and the final system}
+\author{Sachintha Weththasinghe$^1$, Hasitha Hirushan$^1$, Hasaan Saadhiq$^1$, Janith Ramanayake$^2$\\[2pt]
+\small $^1$Sri Lanka Institute of Information Technology (SLIIT)\quad $^2$University of Moratuwa (UoM)\\
+\small Team SinBotics}
+\date{29 October 2026}
 
 \begin{document}
 \maketitle
 
 \begin{abstract}
-\noindent We describe our system and the complete experimental record for the Sinhala MMLU Shared Task at ICTer 2026,
-whose test set consists of 2,238 four-option multiple-choice questions from Sri Lankan 2025 school examinations
-(Easy, Medium, Hard). Under the task's 8B-parameter, open-weight, no-retrieval rules and a time budget of a few days, we
-use a single model, \texttt{google/gemma-3-4b-it} (4.30B parameters), without fine-tuning, and study 59 inference-time
-conditions: prompt wording, subject and role information, few-shot examples, option-order averaging, contextual
-calibration, cloze scoring, 4-bit quantisation, a pretrained base model, chain-of-thought reasoning in Sinhala and in
-English with different length limits, self-consistency, prompt ensembles, three Sinhala$\rightarrow$English
-translation pipelines (NLLB-200, MADLAD-400, self-translation) with direct and reasoning-based answering, prompts
-that target negation and option-by-option judgement, a three-turn negation-consistency chain, and option-order
-averaging of the reasoning.
-Conditions were screened on a 280-question stratified subset of the public (Easy-only) training data and the best were
-confirmed on 1,483 held-out questions under selection rules fixed before the confirmation results were seen.
-\textbf{Letting Gemma reason step by step in English about the Sinhala question, then scoring the answer digit, raises
-accuracy from 38.2\% to 45.6\% (+7.4 points, Holm-corrected $p = 1.2\times10^{-6}$, $n=1{,}483$).} Translation
-pipelines, calibration, option-order averaging, cloze scoring and self-consistency did not help. Translations drop
-the negation of about 40\% of negated questions, which explains why translated input hurts most on exactly those
-questions, whereas English reasoning over the original Sinhala handles them well. We also report a scoring pitfall
-that silently reduces next-token evaluation of Gemma to chance: the space before the answer digit is a separate token,
-so the reply must be pre-filled with ``\si{පිළිතුර}: '' (with a trailing space); without it only 5\% of the probability
-falls on the four digits. Two submissions have been produced and validated: English reasoning with a teacher role,
-limited to 512 and to 1,024 new tokens. The final system was reproduced from the committed code on a different machine
-with identical answers for all 2,238 test questions. Leaderboard scores: \todo{to be filled in after the Codabench
-upload}.
+\noindent We describe Team SinBotics' system and our complete experimental record for the Sinhala MMLU Shared Task at
+ICTer 2026. Its test set has 2,238 four-option multiple-choice questions from Sri Lankan 2025 school examinations,
+at three levels (Easy, Medium, Hard). Our \textbf{final system} is \texttt{Qwen/Qwen3.5-4B} with a rank-16 LoRA adapter
+(4.24B parameters at inference). The adapter was trained for one epoch on 25,799 Sinhala multiple-choice questions:
+Global-MMLU Sinhala, plus \emph{sinmulu\_si}, our own collection of 15,190 Sri Lankan exam questions. Before training,
+we removed 165 questions that overlapped with the test set. At inference, the model reasons step by step in English
+about the untranslated Sinhala question, in the role of an expert Sri Lankan teacher of the subject, with Qwen's
+thinking mode on (greedy decoding, at most 4,096 new tokens). The answer is the most probable digit after a final
+``Answer:'' cue.
+
+The work had two phases. In phase 1 we studied 59 inference-time conditions for Gemma-3-4B-it without training. We
+screened them on a 280-question subset of the public (Easy-only) training data and confirmed the best ones on 1,483
+held-out questions, under selection rules fixed in advance. \textbf{English reasoning over the Sinhala question raised
+accuracy from 38.2\% to 45.6\%} (+7.4 points, Holm-corrected $p = 1.2\times10^{-6}$). Translation pipelines,
+calibration, option-order averaging, cloze scoring, self-consistency and ensembles did not help; translations dropped
+the negation in about 40\% of negated questions. We also document a scoring pitfall: the answer digit follows a
+separate space token, so the reply must be pre-filled.
+
+In phase 2 we fine-tuned. LoRA adapters on our data improved Gemma, but every run overfitted after the first epoch.
+LoRA on Qwen3.5-4B raised validation accuracy from 44.4\% to 54.8\%. We chose the final combination of base model,
+adapter and thinking mode by comparing full test-prediction files on a stratified 300-question subset of the test
+questions, scored with an answer key for that subset (Section~\ref{sec:final_select}). This is a deviation from the
+task's rule against tuning on test questions, and we report it openly. On that subset the final system scores 59.7\%,
+against 47.3\% for our phase-1 submission. sinmulu\_si was transcribed from exam-paper images with Claude Sonnet 5.5
+(a closed API, used only to create training data); some of its answers are model-derived. \textbf{Final leaderboard score: Macro Avg 57.58\%} (Easy 54.67, Medium 52.30, Hard 65.77).
 \end{abstract}
 
 \tableofcontents
@@ -72,10 +76,13 @@ Medium (O/L level) and Hard (A/L level). The paper finds that open models up to 
 Claude 3.5 Sonnet reaches 67.65\% overall. The ICTer 2026 shared task asks participants to improve on this under
 strict constraints (Section~\ref{sec:task}).
 
-Our constraints were mainly time and compute: work on the final system started on 24 October, three days before the
-leaderboard closed, on a single rented RTX~3090. We therefore chose one strong small multilingual model and
-investigated only inference-time methods, with a statistically careful protocol so that the many comparisons
-would not mislead us.
+Our constraints were mainly time and compute. Work on the system started on 24 October, on rented single-GPU
+machines (RTX~3090, L40, A100), and the leaderboard closed on 28 October. In \textbf{phase 1} (24--26 October) we
+chose one strong small multilingual model, Gemma-3-4B-it. We studied only inference-time methods, with a
+statistically careful protocol so that the many comparisons would not mislead us (Sections~\ref{sec:method}--\ref{sec:followup}).
+In \textbf{phase 2} (27--28 October) we fine-tuned with LoRA on two sources of Sinhala multiple-choice questions, moved
+to Qwen3.5-4B, and enabled its thinking mode (Section~\ref{sec:finetune}). Section~\ref{sec:system} gives the final
+system.
 
 \paragraph{Contributions.}
 \begin{enumerate}
@@ -83,13 +90,17 @@ would not mislead us.
 paired significance tests, and a strict separation of screening, confirmation and test data.
 \item A systematic screen of 59 inference-time conditions for Gemma-3-4B-it on Sinhala exam questions, and
 pre-registered confirmations of the best candidates on 1,483 held-out questions.
-\item A verified reproduction: rebuilt from the committed code on a second machine, the final system gives the same
+\item A verified reproduction: rebuilt from the committed code on a second machine, the phase-1 system gives the same
 answer on every one of the 2,238 test questions.
 \item The finding that \emph{English} chain-of-thought over the untranslated Sinhala question gives a robust gain
 of about +7 points, while machine translation (NLLB, MADLAD, self-translation) does not help, also not when combined
 with reasoning, because translations frequently lose negation.
 \item A documented scoring pitfall (answer pre-fill and the space token) and several other engineering errors
 that we found and corrected, with their effect on results.
+\item \emph{sinmulu\_si}: 15,190 Sinhala multiple-choice questions transcribed from 3,486 Sri Lankan exam papers.
+Overlap with the test set was removed by a two-round, manually reviewed similarity check.
+\item A LoRA recipe that trains only the answer digit, so the reasoning prompt keeps working, together with the final
+system: Qwen3.5-4B + LoRA + English thinking, 4.24B parameters.
 \end{enumerate}
 
 %=====================================================================================================================
@@ -102,14 +113,19 @@ that we found and corrected, with their effect on results.
 Rule & How our system complies\\
 \midrule
 $\le$ 8B total parameters across all inference components (MoE counts all experts, LoRA adapters add to the base,
-quantisation does not reduce the count) & One model: Gemma-3-4B-it, 4,300,079,472 parameters including its unused vision
-tower (Section~\ref{sec:params}).\\
-Open-weight models released before 1 October 2026 & Gemma 3 was released in March 2025 (Gemma licence).\\
+quantisation does not reduce the count) & One model: Qwen3.5-4B's text model (4,205,751,296) plus our LoRA adapter
+(30,474,240), merged: \textbf{4.24B}. The full checkpoint, including the vision tower we do not load, has 4,659,865,088
+(Section~\ref{sec:qwen}). Phase 1: Gemma-3-4B-it, 4,300,079,472.\\
+Open-weight models released before 1 October 2026 & Qwen3.5-4B: 27 February 2026, Apache-2.0. Gemma 3: March 2025.\\
 No retrieval of any kind (RAG, BM25, dictionaries, lookup tables) & None. Few-shot examples are \emph{fixed per subject}
 and never chosen by similarity to the test question.\\
-Closed APIs only for generating training data, with disclosure & No closed API was used at all.\\
-No training, tuning or prompt design on test questions & Every choice was made on the public training data; test
-questions were only scored to write predictions (one process note in Section~\ref{sec:limits}).\\
+Closed APIs only for generating training data, with disclosure & Claude Sonnet 5.5 (Anthropic) transcribed the
+exam-paper page images of sinmulu\_si and labelled answers where no marking scheme existed (Section~\ref{sec:trainingdata}).
+No closed API is used at inference.\\
+No training, tuning or prompt design on test questions & No test question was trained on, and the training data was
+cleaned of test overlap. Phase-1 choices were made on the public training data only. \textbf{However}, the final
+choice among phase-2 systems compared full test-prediction files on a 300-question test subset with an answer key
+(Section~\ref{sec:final_select}), which we disclose as a deviation.\\
 Organisers reproduce every final system from submitted code & Deterministic greedy decoding, pinned library versions,
 model revision hash, one command per step (Section~\ref{sec:repro}).\\
 Cite Pramodya et al., EMNLP 2025 & \cite{pramodya2025}.\\
@@ -123,8 +139,9 @@ The leaderboard metric is the \textbf{macro average of the Easy, Medium and Hard
 Codabench (at most 3 per day) as a zip containing \texttt{predictions.jsonl}, one line per test question, e.g.\
 \verb|{"q_no": 1, "subject": "Art", "category": "Humanities", "level": "easy", "answer": "2"}|.
 The \texttt{answer} is a string; the key fields must be copied verbatim from the test files (their subject strings
-are inconsistent, Section~\ref{sec:data}). Schedule: leaderboard closes 27 October 2026 (23:59), code due
-28 October, system report and slides due 30 October.
+are inconsistent, Section~\ref{sec:data}). Schedule: the leaderboard closed on 28 October 2026 (extended from 27 October); code and
+models were due on 28 October (23:59 Sri Lanka time, on Hugging Face); the system report and slides are due on
+30 October.
 
 %=====================================================================================================================
 \section{Data}\label{sec:data}
@@ -176,7 +193,8 @@ kept because it is part of Sinhala conjuncts such as \si{ප්‍ර}.
 \paragraph{Data we did not use.} The Hugging Face release \texttt{naist-nlp/SinhalaMMLU} was \emph{deliberately not
 accessed}: its card states that the shared-task Hard test set (``SinhalaMMLU 2.0'') is built from the paper's Hard
 questions with one option removed, so it may contain test questions with answers. It is also gated under
-CC~BY-NC-ND~4.0. No other external data was used for the system described here.
+CC~BY-NC-ND~4.0. The phase-1 system used no external data; the training data of phase 2 is described in
+Section~\ref{sec:trainingdata}.
 
 \subsection{Contamination check}
 Every training question was compared with every test question by character 5-gram Jaccard similarity on a
@@ -225,6 +243,64 @@ above; 95\% interval about $\pm$2.5 points.\\
 \caption{Evaluation sets (all from public train, all Easy).}
 \end{table}
 
+\subsection{Training data for fine-tuning (phase 2)}\label{sec:trainingdata}
+\begin{table}[h]
+\centering\small
+\begin{tabular}{llrr}
+\toprule
+Dataset & Source / licence & Questions & Train / validation\\
+\midrule
+Global-MMLU, Sinhala & \texttt{CohereLabs/Global-MMLU} (\texttt{si}), Apache-2.0 & 14,324 & 12,926 / 1,398\\
+sinmulu\_si (ours) & Sri Lankan exam papers & 15,180 & 13,749 / 1,431\\
+\midrule
+Combined (final adapter) & union & 29,504 & 26,675 / 2,829\\
+\bottomrule
+\end{tabular}
+\caption{Training data. Validation sets are 10\% per subject (seed 42), and no question text appears in both parts.
+Questions longer than 1,024 tokens were skipped in training (25,799 / 2,745 used).}
+\end{table}
+
+\paragraph{Global-MMLU, Sinhala} \cite{globalmmlu2025}: MMLU translated into Sinhala (57 subjects), at revision
+\texttt{0e619dbe\ldots}. We merged the test (14,042) and dev (285) splits, dropped 3 questions with an empty option, and
+converted the rest to the competition format (\texttt{python -m sinmmlu.gmmlu}). The paper rates the naturalness of
+Global-MMLU-si at 71/100, against 97/100 for native questions, so it is a weaker but larger source.
+
+\paragraph{sinmulu\_si} (our own; published at \url{https://huggingface.co/datasets/JaniRaviRash-523/sinmulu-si}). It was built from 3,486 Sri Lankan exam-paper PDFs:
+G.C.E.\ O/L and A/L papers and provincial term tests.
+\begin{itemize}
+\item \emph{Transcription.} Most PDFs use legacy Sinhala fonts, so text extraction produced unusable output. Instead,
+each page was rendered as an image and transcribed by \textbf{Claude Sonnet 5.5}, in batches by several agents working
+in parallel on separate slices. Stems and options were copied verbatim.
+\item \emph{Selection.} Only Sinhala-medium papers and true multiple-choice questions were kept. We excluded
+calculation-heavy subjects (Mathematics, Accounting, Statistics) and English, Tamil and other language papers.
+Questions that depended on diagrams, or whose scan was too poor to read confidently, were dropped rather than guessed.
+\item \emph{Answers.} Answers come from official marking schemes where available, matched to papers by grade, year
+and province. Otherwise an answer was kept only when the model was highly confident, and left blank if not, so
+\textbf{some answers are model-derived}.
+\item \emph{Cleaning.} Records were validated, de-duplicated and cleaned, giving 15,355 four-option questions in about
+48 subjects, with a Sinhala and an English subject name each. Our preparation script (\texttt{python -m sinmmlu.sinmulu})
+later removed 10 further duplicates (same question and options).
+\end{itemize}
+
+\paragraph{Overlap with the test set.} Real exam papers repeat questions, and the test set is built from 2025
+examinations, so we checked sinmulu\_si against all 2,238 test questions before training:
+\begin{enumerate}
+\item After normalising the Sinhala text, we found the closest candidates for each test question with character
+n-gram TF-IDF.
+\item Each pair was scored with \texttt{difflib} similarity on the question and on the choices. The choice score is the
+average of the three best-matching choice pairs, ignoring their order.
+\item We reviewed the ranked pairs by hand, deciding which were the same question and which only looked similar.
+\end{enumerate}
+In round 1, 505 pairs scored $\ge 0.6$ on the combined measure; removing the confirmed duplicates took out 143
+questions. Round 2 used $\ge 0.7$ on question, choices or both, and removed 22 more over three passes (6, 7 and 9).
+That left \textbf{15,190} questions, renumbered \texttt{osi00001}--\texttt{osi15190}.
+
+Some similarity remains by design. 260 test questions still have a question match above 0.7, 10 of them also on the
+choices; we judged most of these to be different template-style questions. However, 15 test questions still score
+$\ge 0.99$ on question similarity, and choice similarity alone (827 test questions above 0.7) is not treated as
+duplication. The cleaning therefore rests on manual judgement and does \emph{not} prove zero leakage
+(Section~\ref{sec:limits}). The check used the test questions and choices only, no answers.
+
 %=====================================================================================================================
 \section{Model choice}\label{sec:model}
 \subsection{Phase 0: small models}
@@ -264,6 +340,17 @@ model without tying shared matrices and therefore counted tied embeddings twice:
 output layer) and 0.62B. An earlier statement in our notes that Gemma + MADLAD (``8.44B'') exceeds the limit was
 therefore wrong: the combination has 7.24B parameters and is allowed. This did not affect any decision
 (Section~\ref{sec:select}).
+
+\subsection{Qwen3.5-4B (phase 2)}\label{sec:qwen}
+\texttt{Qwen/Qwen3.5-4B} \cite{qwen35}\footnote{Revision \texttt{851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a}, released
+27 February 2026, Apache-2.0.} is a hybrid model: 24 Gated-DeltaNet linear-attention layers and 8 full-attention
+layers. Its chat template has a switch for its own \emph{thinking mode}. The checkpoint has 4,659,865,088 parameters
+including a vision encoder. We load the text model only (\texttt{Qwen3\_5ForCausalLM}, 4,205,751,296 parameters) in
+bfloat16, using the \texttt{flash-linear-attention} 0.4.0 and \texttt{causal-conv1d} 1.7.0 kernels.
+
+Its tokenizer is less efficient on Sinhala than Gemma's: 4.78 tokens per word, against 3.04, so prompts and reasoning
+are longer. We moved to Qwen3.5-4B for two reasons: it is newer and stronger, and it was trained for long reasoning;
+see Section~\ref{sec:final_select} for how the choice was made.
 
 %=====================================================================================================================
 \section{Method}\label{sec:method}
@@ -731,17 +818,17 @@ Submission & Easy & Medium & Hard & Macro average\\
 \end{table}
 
 \subsection{Reproduction from a clean setup}\label{sec:reproduction}
-On 26 October the final system was rebuilt on a different machine (a new RTX~3090 pod) from the committed code
+On 26 October the phase-1 system was rebuilt on a different machine (a new RTX~3090 pod) from the committed code
 (\texttt{ae9abe5}): fresh library install, dev files rebuilt from the raw data (identical id lists), Gemma-3-4B-it
 downloaded again (same revision \texttt{093f9f38\ldots}), then the test run of submission 2 repeated (3,680\,s; 4,282\,s
 originally), recorded with the clean code revision \texttt{ae9abe5}.
 \textbf{All 2,238 test answers are identical to the uploaded submission 2.} The two confirmation-set runs repeated on
-the new machine also gave identical accuracies (baseline 38.17\%, final system 45.58\%), as did the final system on
+the new machine also gave identical accuracies (baseline 38.17\%, phase-1 system 45.58\%), as did the phase-1 system on
 the 280-question subset (48.93\%). Greedy decoding with bfloat16 on the same GPU type is therefore exactly
 reproducible with this code.
 
 \subsection{Question types on the confirmation set}
-The type analysis of Section~\ref{sec:negation} was repeated for the final system on the 1,483 confirmation questions,
+The type analysis of Section~\ref{sec:negation} was repeated for the phase-1 system on the 1,483 confirmation questions,
 where the groups are larger (Table~\ref{tab:qtypes_rest}).
 
 \begin{table}[h]
@@ -751,7 +838,7 @@ where the groups are larger (Table~\ref{tab:qtypes_rest}).
 Condition (confirmation set) & All & Negation (157) & Sub-option (22) & Blank (104) & Numeric (119) & Plain (1,123)\\
 \midrule
 A0 baseline (direct scoring) & 38.2 & 37.6 & 27.3 & 28.8 & 35.3 & 39.2\\
-final system (\cond{cot\_en\_role}, 1,024) & \textbf{45.6} & \textbf{50.3} & 31.8 & 35.6 & 37.0 & 46.3\\
+phase-1 system (\cond{cot\_en\_role}, 1,024) & \textbf{45.6} & \textbf{50.3} & 31.8 & 35.6 & 37.0 & 46.3\\
 gain & +7.4 & \textbf{+12.7} & +4.5 & +6.8 & +1.7 & +7.1\\
 \bottomrule
 \end{tabular}
@@ -764,7 +851,7 @@ questions. Sub-option (combinations of statements), fill-in-the-blank and numeri
 (31.8--37.0\%) and gain least: they are natural targets for later fine-tuning data.
 
 \subsection{Final screening round}\label{sec:final_round}
-Three more ideas were screened on the subset against the final system at 1,024 tokens (48.9\%), with the same
+Three more ideas were screened on the subset against the phase-1 system at 1,024 tokens (48.9\%), with the same
 pre-stated rule (+2 points to go to the confirmation set):
 \begin{itemize}
 \item \textbf{Negation-consistency chain} (\cond{cot\_en\_role\_negchain}), a three-turn conversation: (1) reason in
@@ -772,7 +859,7 @@ English and list \emph{all} correct options (``more than one option may be corre
 (2) write the opposite question in English (``which options are NOT correct'', or the reverse for an already negated
 question), reason and list its options ($\le$ 1,024 tokens); (3) with both analyses in the conversation, choose the
 single correct answer to the original question ($\le$ 256 tokens), scored after ``Answer:\textvisiblespace''.
-\item \textbf{Option-order averaging of the reasoning}: the final system reasons under the original option order and
+\item \textbf{Option-order averaging of the reasoning}: the phase-1 system reasons under the original option order and
 under the order shifted by one position (every option moves); the two scored label distributions are mapped back to
 the original options and averaged.
 \item \textbf{Three-prompt ensemble at 1,024 tokens}: \cond{cot\_en} + \cond{cot\_en\_role} + \cond{cot\_en\_fewshot2},
@@ -785,7 +872,7 @@ all at 1,024 tokens (the same 28 model-written worked examples as before).
 \toprule
 Condition (subset, $n$=280) & Acc. & Gain & CI of gain & $p$ & Time (s)\\
 \midrule
-reference: \cond{cot\_en\_role}, 1,024 tokens (final system) & 48.9 & -- & -- & -- & 438\\
+reference: \cond{cot\_en\_role}, 1,024 tokens (phase-1 system) & 48.9 & -- & -- & -- & 438\\
 negation-consistency chain & 47.5 & $-$1.4 & [$-$7.9, +5.0] & 0.74 & 1,236\\
 option-order averaging of the reasoning (2 orders) & 49.6 & +0.7 & [$-$3.9, +5.4] & 0.88 & 857\\
 ensemble of 3 reasoning prompts, 1,024 tokens & 50.7 & +1.8 & [$-$2.9, +6.4] & 0.54 & 1,273\\
@@ -814,14 +901,124 @@ the confirmation set can detect ($\pm$2.5 points) and at three times the test-ti
 \textbf{submission 2 remains the final system.}
 
 %=====================================================================================================================
-\section{Final system}\label{sec:system}
-The current final system is submission 2; submission 1 differs only in the reasoning limit (512 tokens).
+\section{Fine-tuning and the move to Qwen3.5-4B (phase 2)}\label{sec:finetune}
+\subsection{LoRA on the answer digit}
+We train LoRA adapters \cite{hu2022lora} with \texttt{python -m sinmmlu.train\_lora}. The training signal is
+$\log P(\text{gold digit})$ at the position after a plain multiple-choice prompt (\cond{en\_instr\_nosubject}) whose
+chat reply is pre-filled with ``Answer:\textvisiblespace''. This is exactly the quantity that our digit scorer reads
+(left padding, positions from the attention mask, last position only).
 \begin{itemize}
-\item \textbf{Model}: \texttt{google/gemma-3-4b-it}, revision \texttt{093f9f38\ldots}, bfloat16, 4,300,079,472
-parameters (only component; 8B limit respected).
+\item The loss is on that one token only: there is no loss on the question, the pre-fill or an end-of-turn token. So
+the model is never taught to stop after a digit, and the reasoning prompt of Section~\ref{sec:system} keeps working.
+\item The training prompt is deliberately \emph{not} the reasoning prompt used at inference.
+\item Each step takes 32 random questions, sorted by length into micro-batches of at most 12,288 padded tokens.
+\item Optimiser: AdamW (learning rate $10^{-4}$, cosine schedule with 3\% warm-up, weight decay 0, gradient clipping
+1.0), seed 42.
+\item LoRA: rank 16, $\alpha = 32$, dropout 0.05, on the attention and MLP projections. For Qwen3.5 it also covers the
+linear-attention projections \texttt{in\_proj\_qkv}, \texttt{in\_proj\_z} and \texttt{out\_proj} of all 32 text layers,
+30,474,240 parameters in all.
+\item \texttt{merge\_and\_unload} adds no parameters, and \texttt{python -m sinmmlu.merge\_lora} rebuilds a merged model
+from a saved adapter byte for byte.
+\end{itemize}
+
+\subsection{Gemma-3-4B-it adapters}
+\begin{table}[h]
+\centering\small
+\begin{tabular}{llllr}
+\toprule
+Adapter & Data & Rank & Validation set & Accuracy before $\rightarrow$ after\\
+\midrule
+A & Global-MMLU si & 16 & Global-MMLU dev part & 40.1 $\rightarrow$ 41.5\\
+B, epoch 1 / 2 / 3 & sinmulu\_si & 16 & 5\% of sinmulu\_si (714) & 40.9 $\rightarrow$ 47.1 / 47.3 / 45.8\\
+C, epoch 1 / 2 & sinmulu\_si & 8, dropout 0.1 & 10\% of sinmulu\_si (1,431) & 37.5 $\rightarrow$ 43.8 / 44.4\\
+\bottomrule
+\end{tabular}
+\caption{Gemma-3-4B-it LoRA adapters (validation accuracy with the digit prompt, \%). Every run peaked after one epoch:
+training loss kept falling while validation stopped improving or got worse.}
+\end{table}
+With \cond{cot\_en\_role} reasoning on the 280-question screening set (an L40 run), the base model scored 47.1\%,
+adapter B after epoch 1 46.8\%, and after epoch 2 51.4\%. A better digit-prompt validation score therefore did not
+reliably carry over to the reasoning prompt. On average, fine-tuning changed about half of the reasoning answers.
+
+\subsection{Qwen3.5-4B adapter (final)}
+One epoch on the combined data took 807 steps and 8.8 hours on an RTX~3090. Validation accuracy (2,745 questions,
+digit prompt) rose steadily and was still rising slowly at the end:
+
+\begin{center}\small
+\begin{tabular}{l*{9}{r}}
+\toprule
+Step & 0 & 100 & 200 & 300 & 400 & 500 & 600 & 700 & 807\\
+Accuracy (\%) & 44.4 & 47.4 & 49.9 & 51.7 & 51.7 & 52.8 & 53.2 & 54.5 & 54.8\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Thinking mode}\label{sec:thinking}
+The prompt \cond{cot\_en\_role\_think} is exactly the \cond{cot\_en\_role} text, but rendered with
+\texttt{enable\_thinking=True} and allowed up to 4,096 new tokens. The model first reasons inside
+\texttt{<think>}\ldots\texttt{</think>}. \texttt{</think>} is a special token and disappears when decoding, so the
+scorer closes the thinking block whenever its tag is absent, before appending the ``Answer:'' cue. In the final test
+run:
+\begin{itemize}
+\item 56.0\% of the texts stated an answer (77.7\% without thinking at 1,024 tokens); the rest reached the 4,096-token
+limit and were scored after the cue;
+\item 97.4\% of the stated answers agree with the scored digit;
+\item the mean label mass after the cue was 0.999, and the longest input was 4,865 tokens.
+\end{itemize}
+
+\subsection{Selection of the final system}\label{sec:final_select}
+Phase 2 had about two days and no labelled Medium or Hard development data. To compare candidate systems, we built a
+level-balanced stratified subset of 300 \emph{test} questions (100 per level; \texttt{python -m sinmmlu.test\_subset})
+and scored full prediction files on it against an answer key for those questions. No test question or answer was used
+for training. However, comparing systems on test questions is model selection on test data, which the task rules
+prohibit. We report it here openly, and the subset numbers below should be read as optimistic: they are not
+independent estimates.
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{lrrrr}
+\toprule
+System (full test-prediction file, 300-question test subset) & All & Easy & Medium & Hard\\
+\midrule
+Gemma-3-4B-it, \cond{cot\_en\_role}, 1,024 tokens (submission 2) & 47.3 & 49 & 46 & 47\\
+Gemma-3-4B-it + adapter A (Global-MMLU si), \cond{cot\_en\_role} & 50.3 & 53 & 51 & 47\\
+Gemma-3-4B-it + adapter B, epoch 2, \cond{cot\_en\_role} & 49.3 & 49 & 53 & 46\\
+Qwen3.5-4B, \cond{cot\_en\_role} (no thinking) & 54.7 & 59 & 48 & 57\\
+Qwen3.5-4B, \cond{cot\_en\_role} + subject hints and a NOT rule & 42.7 & 46 & 46 & 36\\
+Qwen3.5-4B + combined LoRA, \cond{cot\_en\_role} (no thinking) & 55.0 & 56 & 53 & 56\\
+\textbf{Qwen3.5-4B + combined LoRA, \cond{cot\_en\_role\_think}} (final) & \best{59.7} & 59 & 56 & 64\\
+\bottomrule
+\end{tabular}
+\caption{Candidate systems on the 300-question test subset (accuracy, \%; 95\% interval about $\pm$5.7 points
+overall, $\pm$10 per level). Exact McNemar tests: final vs.\ the same model without thinking $p = 0.17$, final vs.\
+base Qwen $p = 0.12$, combined LoRA vs.\ base Qwen (both without thinking) $p = 1.0$, base Qwen vs.\ submission 2
+$p = 0.04$, final vs.\ submission 2 $p = 0.001$.}
+\end{table}
+On the Codabench leaderboard, the final system scored \textbf{Macro Avg 57.58\%} (Easy 54.67, Medium 52.30, Hard
+65.77), 2.1 points below its subset score, which fits a selection made on the subset.
+
+Only two steps are clearly larger than the noise: the move from Gemma to Qwen, and the full final system against
+submission 2. The adapter alone made no measurable difference on the subset (55.0 vs.\ 54.7), although it helped
+clearly on our own validation data (+10.4 points). Thinking mode added about 4.7 points, but that gain is not
+significant at $n = 300$.
+
+The GPU itself moves scores: the same Gemma system scored 47.3\% when generated on an RTX~3090 and 44.3\% on an L40,
+because bf16 rounding changes greedy reasoning. Prompt changes need care too: a subject-aware variant of the prompt
+lowered the stated-answer rate to 41.9\% and lost 12 points.
+
+%=====================================================================================================================
+\section{Final system}\label{sec:system}
+The final system was submitted on 28 October 2026. The code, inference script, adapter and predictions are in
+\texttt{SinhalaMMLU-SharedTask/team-sinbotics} on Hugging Face. Phase-1 submissions 1 and 2 (Gemma-3-4B-it,
+\cond{cot\_en\_role}, 512 and 1,024 tokens) are described in Sections~\ref{sec:results}--\ref{sec:followup}.
+\begin{itemize}
+\item \textbf{Model}: \texttt{Qwen/Qwen3.5-4B}, revision \texttt{851bf6e8\ldots}, text model, bfloat16, with the
+combined-data LoRA adapter merged in (adapter MD5 \texttt{6d42bd99\ldots}). That is 4,205,751,296 + 30,474,240 =
+\textbf{4.24B parameters}, the only component, within the 8B limit.
 \item \textbf{Input}: NFC normalisation, ZWNJ removed, ZWJ kept; options numbered ``1.''--``4.''; the English subject
-name from the test file.
-\item \textbf{Prompt} (user turn of Gemma's chat template):
+name from the test file; the Sinhala question is not translated.
+\item \textbf{Prompt} (\cond{cot\_en\_role\_think}; the user turn of Qwen's chat template with
+\texttt{enable\_thinking=True} and a fixed template date):
 \begin{Verbatim}[fontsize=\small,frame=single]
 You are an expert Sri Lankan teacher of {subject}.
 The following is a multiple choice question in Sinhala about {subject}.
@@ -833,10 +1030,13 @@ Question: {Sinhala question}
 ...
 4. {option 4}
 \end{Verbatim}
-\item \textbf{Decoding}: greedy, at most 1,024 new tokens (submission 2; 512 in submission 1); the stated answer (if
-any) is cut, ``\textbackslash n\textbackslash n Answer:\textvisiblespace'' appended, and the argmax over the digit
-tokens 1--4 is the prediction.
-\item \textbf{No} retrieval, no fine-tuning, no external data, no closed API, no test-time adaptation.
+\item \textbf{Decoding}: greedy, at most 4,096 new tokens, length-sorted batches of 48. Any stated answer is cut,
+the thinking block is closed if needed, and ``\textbackslash n\textbackslash n Answer:\textvisiblespace'' is appended.
+The argmax over the digit tokens 1--4 is the prediction.
+\item \textbf{Run}: one NVIDIA A100-SXM4 40\,GB, about 5 hours for 2,238 questions; \texttt{inference.py} in the
+submission repository downloads everything from Hugging Face.
+\item \textbf{No} retrieval, no closed API at inference, no test-time adaptation. Training data: Global-MMLU si and
+sinmulu\_si (Section~\ref{sec:trainingdata}).
 \end{itemize}
 
 %=====================================================================================================================
@@ -893,22 +1093,35 @@ unpack & 1\,MB parts, each checked by MD5 and resent if needed\\
 \texttt{qtypes}. 38 offline tests (including a fake bigram model that checks batched label and cloze scoring against
 an unbatched reference, a simulated out-of-memory split, and stub models for self-consistency, the multi-turn
 negation chain and option-order averaging of the reasoning) run without a GPU.
-The code is in git (branch \texttt{initial-setup}, commit \texttt{f15939b}); reproducing submission 2 from a clean setup
-gives identical answers for all 2,238 test questions (Section~\ref{sec:reproduction}). Every experiment stores its configuration, model revision, parameter count, library versions, GPU and
+Phase 2 added \texttt{gmmlu}, \texttt{sinmulu} and \texttt{combined} (training data), \texttt{train\_lora} and
+\texttt{merge\_lora} (fine-tuning), \texttt{test\_subset} and \texttt{score\_subset}, and batch-wise saving of generated
+text, so that an interrupted run resumes; there are now 46 offline tests. The code is in git (branch
+\texttt{initial-setup}, commit \texttt{ec8c8d5}). Reproducing submission 2 from a clean setup gave identical answers for
+all 2,238 test questions (Section~\ref{sec:reproduction}). For the organisers, the final system is also a
+self-contained \texttt{inference.py}. We checked that it builds the same prompt for all 2,238 test questions and
+treats all 2,238 final reasoning texts the same way as the package. Every experiment stores its configuration, model revision, parameter count, library versions, GPU and
 git revision in \texttt{outputs/<experiment>/config.json}.
 
-\paragraph{Commands} (RunPod, after uploading the code and data):
+\paragraph{Commands, final system:}
+\begin{Verbatim}[fontsize=\small,frame=single]
+bash runpod/setup.sh                       # GPU check, pinned libraries, tests, Qwen3.5-4B (not gated)
+python -m sinmmlu.combined                 # training data (needs sinmulu_si.json)
+bash runpod/train_qwen_combined_1028.sh    # LoRA, 1 epoch (8.8 h, RTX 3090)
+bash runpod/think_1028.sh test             # merge + cot_en_role_think on test (~5 h, A100)
+# organisers: pip install -r requirements.txt && python inference.py   (Hugging Face repo)
+\end{Verbatim}
+\paragraph{Commands, phase 1} (scripts in \texttt{runpod/experiments/}):
 \begin{Verbatim}[fontsize=\small,frame=single]
 export HF_TOKEN=...                      # read token; Gemma licence accepted
 bash runpod/speedtest.sh                 # network check before installing anything
-bash runpod/setup.sh                     # GPU check, pinned libraries, dev files, tests, gemma-3-4b-it only
-bash runpod/rerun_1026.sh                # reproduce submission 2 and compare; final system on the 1,483
-bash runpod/run_subset.sh smoke          # then wave1, wave2, wave3, combos, confirm
-bash runpod/select_and_test.sh           # selection rule -> submission 1
-bash runpod/run_subset.sh cheap          # then translation, qtypes (follow-up screening)
-bash runpod/confirm2.sh                  # second confirmation + selection -> submission 2
-bash runpod/negchain_1026.sh             # final screening round (with runpod/last2_1026.sh)
-# or directly, the final system only:
+bash runpod/setup.sh gemma               # GPU check, pinned libraries, dev files, tests, gemma-3-4b-it
+bash runpod/experiments/rerun_1026.sh  # reproduce submission 2; rerun on the 1,483
+bash runpod/experiments/run_subset.sh smoke  # then wave1, wave2, wave3, combos, confirm
+bash runpod/experiments/select_and_test.sh  # selection rule -> submission 1
+bash runpod/experiments/run_subset.sh cheap  # then translation, qtypes (follow-up screening)
+bash runpod/experiments/confirm2.sh  # second confirmation + selection -> submission 2
+bash runpod/experiments/negchain_1026.sh  # final screening round (+ last2_1026.sh)
+# or directly, the phase-1 system only:
 python -m sinmmlu.evaluate --model configs/models/gemma3_4b_it.yaml --data test \
        --prompt cot_en_role --chat on --max-new-tokens 1024
 \end{Verbatim}
@@ -918,7 +1131,9 @@ outputs/gemma3_4b_it__none__cot_en_role__chaton__p1__c0__trnone__mt1024__test/pr
 \end{Verbatim}
 Greedy decoding makes the run deterministic up to floating-point differences between GPUs.
 
-\paragraph{Cost.} All runs together took about 13.5 GPU-hours on RTX~3090s (about 10 on 24 October, about 3.5 for the
+\paragraph{Cost.} Phase 2 took about 40 GPU-hours (RTX~3090, RTX 5000 Ada, L40 and A100): LoRA runs of
+0.7--8.8 hours, test-prediction runs of 1.5--3 hours without thinking, and 5 hours with it. Phase 1 took about
+13.5 GPU-hours on RTX~3090s (about 10 on 24 October, about 3.5 for the
 reproduction and the final screening round on 26 October): a label-scored condition takes 5--42\,s
 for 280 questions (few-shot prompts are the slowest), a reasoning condition 6--9 minutes for 280 questions and 31--47
 minutes for 1,483, and a test run 51 (512 tokens) to 71 minutes (1,024 tokens).
@@ -929,9 +1144,18 @@ minutes for 1,483, and a test run 51 (512 tokens) to 71 minutes (1,024 tokens).
 \item \textbf{All development data is Easy.} We have no labelled Medium or Hard questions, so the gains may not transfer
 to O/L and A/L questions, which are two thirds of the metric. In particular we cannot measure whether the 140 answers
 that changed between submissions 1 and 2 (cut-off reasoning completed) are improvements; only the leaderboard shows it.
-\item \textbf{Single model, no training.} Fine-tuning (for example on Global-MMLU-si \cite{globalmmlu2025} and the
-public training data) was out of time; the paper rates the naturalness of Global-MMLU-si questions at 71/100
-against 97/100 for native questions, so such data would need care.
+\item \textbf{Final selection on test questions.} The phase-2 systems were compared on a 300-question subset of the
+test set with an answer key (Section~\ref{sec:final_select}). This is model selection on test data. Its numbers are
+optimistic, and only the leaderboard (and the organisers' reproduction) give an unbiased score.
+\item \textbf{Possible residual leakage.} 15 test questions still have a sinmulu\_si question with $\ge 0.99$ question
+similarity, judged different on review, but this does not prove zero leakage (Section~\ref{sec:trainingdata}).
+\item \textbf{Model-made training data.} sinmulu\_si was transcribed by Claude Sonnet 5.5, and some of its answers are
+model-derived, so it contains transcription and labelling errors that we could not measure.
+\item \textbf{Long reasoning.} 44\% of the final reasoning texts reach the 4,096-token limit before stating an answer,
+and those answers are scored after a cut-off reasoning. Thinking mode also makes inference slow (about 5 hours on an
+A100).
+\item \textbf{Validation $\neq$ reasoning accuracy.} The adapters are validated with the digit prompt, but used with a
+reasoning prompt; the two did not always move together (Section~\ref{sec:finetune}).
 \item \textbf{Screening noise.} With 280 questions, gains below about 7 points cannot be separated; two subset results
 did not replicate. Only the confirmation results should be quoted as findings.
 \item \textbf{Parameter-count error} at selection time (corrected; no effect on the decision).
@@ -941,28 +1165,32 @@ labels, nothing was chosen from them, and no other test-set statistic was comput
 \item \textbf{Lost raw outputs.} The rented pod was terminated on 25 October, which deleted its volume before the raw
 outputs of the follow-up experiments (Section~\ref{sec:followup}) had been copied. All numbers in this report were
 recorded in our lab notebook before that. On 26 October the most important runs were repeated with identical results
-(Section~\ref{sec:reproduction}), restoring the per-question outputs of the final system on the confirmation set and
+(Section~\ref{sec:reproduction}), restoring the per-question outputs of the phase-1 system on the confirmation set and
 its 2,238 test reasoning texts. Still missing are the per-question outputs of the other follow-up runs of 24 October,
 some per-type cells (Table~\ref{tab:qtypes}) and the translation caches; greedy decoding and fixed seeds make them
 reproducible if needed. Raw outputs of the screening waves, combinations, the first confirmation, the final screening
 round and both submission files are kept.
-\item \textbf{Licences.} NLLB (used only in screening) is CC-BY-NC~4.0; the final system uses only Gemma (Gemma
-terms of use).
+\item \textbf{GPU dependence.} bf16 rounding changes greedy reasoning across GPUs; the same system scored 44.3\% and
+47.3\% on the test subset on two GPU types. A reproduction on other hardware will differ in some answers.
+\item \textbf{Licences.} NLLB (used only in screening) is CC-BY-NC~4.0; the final system uses Qwen3.5-4B
+(Apache-2.0) and Global-MMLU (Apache-2.0); sinmulu\_si is our own collection of exam questions.
 \end{itemize}
 
 \section{Next steps}
 \begin{enumerate}
-\item Compare the leaderboard scores of submissions 1 and 2 (Medium/Hard effect of the longer reasoning limit).
-\item Fine-tuning with LoRA on Global-MMLU-si (and the public training data, if the team agrees), judged by the same
-confirmation protocol, with \textbf{negation-focused training data} (for example ``which is NOT \ldots'' questions
-and negated/non-negated question pairs) and a separate negation evaluation, since negation is the clearest failure
-mode of direct scoring and of translated input (Section~\ref{sec:negation}); and data for the weakest types on the
-confirmation set: sub-option, fill-in-the-blank and numeric questions (Table~\ref{tab:qtypes_rest}).
-\item The three-prompt reasoning ensemble (+1.1 on the confirmation set at 512 tokens, +1.8 on the subset at 1,024;
-not significant) if test-time compute and a larger labelled evaluation set allow a decision.
+\item Build a labelled Medium/Hard development set that is disjoint from the test set (for example from sinmulu\_si's
+O/L and A/L papers), so that system choices no longer need test questions.
+\item Re-check the 15 near-identical test/sinmulu\_si pairs, retrain without any doubtful items, and measure how much
+of the adapter's effect depends on them.
+\item Shorter thinking: a token budget or a prompt that asks for a short check would reduce the 44\% of cut-off
+reasoning and the run time.
+\item Train the adapter on reasoning, not only the digit (e.g.\ distilled English rationales), and include
+negation-focused questions.
+\item Release per-record transcription and answer-source flags for sinmulu\_si.
 \end{enumerate}
 Explored and not pursued: self-consistency, translation pipelines with and without reasoning, option-by-option
-judgement, the negation-consistency chain, option-order averaging of the reasoning, calibration, cloze scoring.
+judgement, the negation-consistency chain, option-order averaging of the reasoning, calibration, cloze scoring, a
+subject-aware prompt variant, more than one LoRA epoch.
 
 %=====================================================================================================================
 \begin{thebibliography}{9}
@@ -978,6 +1206,9 @@ In \emph{NeurIPS 2023 Datasets and Benchmarks}.
 \bibitem{globalmmlu2025} Shivalika Singh et al. 2025. Global MMLU: Understanding and Addressing Cultural and Linguistic
 Biases in Multilingual Evaluation. In \emph{Proceedings of ACL 2025}.
 \bibitem{gemma3} Gemma Team. 2025. Gemma 3 Technical Report. \emph{arXiv:2503.19786}.
+\bibitem{qwen35} Qwen Team. 2026. Qwen3.5-4B. Model card, \url{https://huggingface.co/Qwen/Qwen3.5-4B}.
+\bibitem{hu2022lora} Edward J.\ Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang,
+and Weizhu Chen. 2022. LoRA: Low-Rank Adaptation of Large Language Models. In \emph{Proceedings of ICLR 2022}.
 \bibitem{wang2023} Xuezhi Wang, Jason Wei, Dale Schuurmans, Quoc Le, Ed Chi, Sharan Narang, Aakanksha Chowdhery, and
 Denny Zhou. 2023. Self-Consistency Improves Chain of Thought Reasoning in Language Models. In \emph{Proceedings of
 ICLR 2023}.
@@ -1073,10 +1304,16 @@ submission 1; parameter-count correction; code committed (\texttt{f11ed8e}); rea
 ensemble; translation with reasoning; negation and question-type analysis; second confirmation; submission 2.
 \item 25 Oct: code committed (\texttt{4a4aa89}); pod terminated (follow-up raw outputs lost, numbers kept).
 \item 26 Oct: one pod rejected after a network speed test; on a second pod (code \texttt{ae9abe5}) submission 2
-reproduced exactly (2,238/2,238), final system rerun on the confirmation set; final screening round (negation chain,
+reproduced exactly (2,238/2,238), phase-1 system rerun on the confirmation set; final screening round (negation chain,
 option-order averaging of the reasoning, 1,024-token ensemble); all results copied off the pod; code committed
 (\texttt{f15939b}).
-\item 27 Oct: leaderboard closes. 28 Oct: code. 30 Oct: report and slides.
+\item 27 Oct: Global-MMLU si and sinmulu\_si converted, with validation splits; Gemma LoRA adapters A, B (epochs
+1--3) and C (rank 8, epochs 1--2); test subset built; candidate systems scored on it; switch to Qwen3.5-4B; Qwen
+test predictions; subject-aware prompt tried and dropped. Leaderboard deadline extended to 28 October.
+\item 28 Oct: Qwen3.5-4B LoRA on the combined data (8.8 h); test predictions without and with thinking mode; final
+Codabench submission; code, adapter and predictions uploaded to \texttt{SinhalaMMLU-SharedTask/team-sinbotics};
+code committed (\texttt{ec8c8d5}).
+\item 30 Oct: report and slides.
 \end{itemize}
 
 \end{document}

@@ -42,10 +42,12 @@ runpod/experiments/      the scripts of the earlier experiment rounds (dated)
 final_submission/        mirror of the Hugging Face submission repo (inference.py, README, training code; no weights)
 tests/                   offline tests (no model): python -m pytest -q
 results/                 results.csv (one row per dev experiment), dedup report
-report/                  system description report (LaTeX)
+report/                  submitted system description report (ACL LaTeX + PDF), slides, presenter notes
+results/runpod/          raw pod outputs per round (gitignored)
+docs/organiser/          organisers' report template (gitignored)
 docs/log.md              lab notebook: decisions and results, newest first
 archive/                 earlier student code, phase-0 (≤ 1B) results, old notes
-gitignored               data/ dev/ outputs/ cache/ models/ lora_adapters/ logs/ submissions/ runpod_results*/
+gitignored               data/ dev/ outputs/ cache/ models/ lora_adapters/ logs/ submissions/ results/runpod/
                          (the task data may not be redistributed; weights and raw outputs are too large)
 ```
 
@@ -53,7 +55,7 @@ gitignored               data/ dev/ outputs/ cache/ models/ lora_adapters/ logs/
 ```bash
 pip install -r requirements.txt          # torch 2.8 separately; then: pip install causal-conv1d==1.7.0 --no-build-isolation
 python -m pytest -q
-python -m sinmmlu.combined               # training data (sinmulu_si: data/sinmulu_si/sinmulu_si.json, published separately)
+python -m sinmmlu.combined               # training data (sinmulu_si.json from huggingface.co/datasets/JaniRaviRash-523/sinmulu-si in data/sinmulu_si/)
 bash runpod/train_qwen_combined_1028.sh  # Qwen3.5-4B download + LoRA training -> models/qwen35_4b_lora_combined/
 python -m sinmmlu.evaluate --model configs/models/qwen35_4b_lora_combined.yaml --data test \
     --prompt cot_en_role_think --chat on --max-new-tokens 4096

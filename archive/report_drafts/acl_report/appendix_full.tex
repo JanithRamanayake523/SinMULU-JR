@@ -1,0 +1,312 @@
+\section{Task Rules and Compliance}\label{app:rules}
+
+\begin{center}\captionsetup{type=table}
+\small
+\caption{Task rules and how our system complies.}\label{tab:rules}
+\begin{tabularx}{\columnwidth}{@{}L{0.36\columnwidth}Y@{}}
+\toprule
+Rule & Our system \\
+\midrule
+$\leq$ 8B parameters at inference & 4.24B, one model (Section~\ref{sec:params}) \\
+Open weights before 1 Oct 2026 & Qwen3.5-4B: 27 Feb 2026, Apache-2.0 \\
+No retrieval & none; no few-shot examples either \\
+Closed APIs only for training data, disclosed & Claude Sonnet 5.5 for \sinmulu{} only (Section~\ref{sec:data}) \\
+No tuning on test questions & none trained on; systems were compared on screening set 2 (Section~\ref{sec:results}) \\
+Reproducible from code & greedy decoding, pinned versions, model revision (Section~\ref{sec:reproduction}) \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Full Model, Data and Compute Tables}\label{app:tables}
+
+\begin{center}\captionsetup{type=table}
+\small
+\caption{All models used, grouped by purpose. The final system is highlighted. HF = huggingface.co.}\label{tab:models}
+\begin{tabularx}{\textwidth}{@{}L{0.25\textwidth}L{0.25\textwidth}L{0.06\textwidth}YL{0.07\textwidth}L{0.13\textwidth}@{}}
+\toprule
+Model & HF link or provider & Params & Role & Used at inference? & Fine-tuned by you? \\
+\midrule
+\multicolumn{6}{@{}l}{\best{Final system}} \\
+\best{Qwen/Qwen3.5-4B} (rev.\ 851bf6e8) & HF: Qwen/Qwen3.5-4B & \textbf{4.21B} & base model & \textbf{Yes} & \textbf{Yes, LoRA} \\
+\best{Our LoRA adapter} (rank 16) & HF: \repo, \texttt{adapter/} & \textbf{30.5M} & merged into the base model & \textbf{Yes, merged} & \textbf{Yes, trained by us} \\
+\midrule
+\multicolumn{6}{@{}l}{\emph{Data creation}} \\
+Claude Sonnet 5.5 \citep{anthropic2026sonnet} & Anthropic, via Claude Code & closed & transcribing exam papers and labelling answers for \sinmulu{} & No & No \\
+\midrule
+\multicolumn{6}{@{}l}{\emph{Experiments only (not in the final system)}} \\
+google/gemma-3-4b-it & HF: google/gemma-3-4b-it & 4.30B & main model of phases 2 and 3 & No & Yes, LoRA (6 adapters) \\
+google/gemma-3-4b-pt & HF: google/gemma-3-4b-pt & 4.30B & phase-2 reference & No & No \\
+google/gemma-3-1b-it & HF: google/gemma-3-1b-it & 1.0B & phases 1 and 2, small-model reference & No & No \\
+Qwen/Qwen3-0.6B & HF: Qwen/Qwen3-0.6B & 0.6B & phase 1, small-model scouting & No & No \\
+meta-llama/Llama-3.2-1B-Instruct & HF: meta-llama/Llama-3.2-1B-Instruct & 1.2B & phase 1, small-model scouting & No & No \\
+facebook/nllb-200-distilled-600M \citep{nllb2022} & HF: facebook/nllb-200-distilled-600M & 0.62B & phase-2 translation & No & No \\
+google/madlad400-3b-mt \citep{kudugunta2023madlad} & HF: google/madlad400-3b-mt & 2.94B & phase-2 translation & No & No \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Gemma-3-4B-it is efficient on Sinhala (3.04 tokens per word). Qwen3.5-4B is a hybrid of 24 Gated-DeltaNet linear-attention layers and 8 full-attention layers, and costs 4.78 tokens per word.
+
+\clearpage
+\begin{center}\captionsetup{type=table}
+\small
+\caption{All data used. HF = huggingface.co.}\label{tab:data}
+\begin{tabularx}{\textwidth}{@{}L{0.16\textwidth}L{0.26\textwidth}L{0.08\textwidth}L{0.07\textwidth}YL{0.2\textwidth}@{}}
+\toprule
+Dataset & Source or link & Language & Size & How it was used & Preprocessing \\
+\midrule
+Shared-task public dataset & organisers & Sinhala & 1,851 (Easy) & validation only; 70 as a few-shot pool in phase 2 & 18 near-duplicates of test questions removed; 1 label fixed \\
+Public test set & organisers & Sinhala & 2,238 & predictions; 300 questions as screening set 2 for system comparison & zero-width non-joiners removed \\
+Global-MMLU si \citep{singh2025globalmmlu} & HF: datasets/CohereLabs/Global-MMLU (si, rev.\ 0e619dbe) & Sinhala (translated) & 14,324 & LoRA training (12,926) and validation (1,398) & test and dev splits merged; 3 items with an empty option dropped \\
+\sinmulu{} (ours) & HF: datasets/JaniRaviRash-523/sinmulu-si; 3,486 exam-paper PDFs & Sinhala & 15,180 & LoRA training (13,749) and validation (1,431) & 165 test overlaps and 10 duplicates removed \\
+\textbf{Combined (final adapter)} & union of the two above & Sinhala & 29,504 & training 26,675 and validation 2,829 (10\% per subject, seed 42) & questions over 1,024 tokens skipped (25,799 and 2,745 used) \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\para{Global-MMLU Sinhala.} Global-MMLU \citep{singh2025globalmmlu} extends the English MMLU benchmark to 42 languages, and paid professional and community annotators checked the translation quality. We used its Sinhala configuration (\texttt{CohereLabs/Global-MMLU}, \texttt{si}, revision 0e619dbe, Apache-2.0), which covers 57 subjects. We merged its test split (14,042 questions) and dev split (285 questions), and dropped 3 questions with an empty option, leaving 14,324. We then held out 10\% of each subject for validation, which gave 12,926 training and 1,398 validation questions.
+
+Global-MMLU is a larger source than our own exam questions, but a less natural one. \citet{pramodya2025sinhalammlu} sampled 100 translated STEM questions from it and 100 native SinhalaMMLU questions, and two Sinhala-speaking annotators rated their naturalness. The translated questions scored 71.07 out of 100, against 97.30 for the native ones. For example, the term ``plasmolysis'' was written as a sound-alike of the English word, not as the standard Sinhala technical term.
+
+\para{Shared-task data.} We fixed one invalid training label (Geography, question 64), and copied the inconsistent subject strings of the test files verbatim into submissions. We removed the zero-width non-joiner, which appears in 357 test items but only 29 training items.
+
+\begin{center}\captionsetup{type=table}
+\small
+\caption{Compute, APIs and costs. GPU hours are approximate.}\label{tab:compute}
+\begin{tabularx}{\textwidth}{@{}YL{0.25\textwidth}L{0.16\textwidth}L{0.15\textwidth}L{0.09\textwidth}@{}}
+\toprule
+Stage & Hardware or API & Platform & GPU hours or usage & Cost (USD) \\
+\midrule
+Data creation (\sinmulu{}) & Claude Sonnet 5.5, medium effort & Claude Code subscription & 3,486 PDFs & not listed \\
+Phase 1: small-model scouting & 1$\times$ T4 & Colab (free) & not recorded & 0 \\
+Phase 2: inference-time study & 1$\times$ RTX~3090 & RunPod & 13.5 GPU-h & in total \\
+Phases 3 and 4: training and experiments & RTX~3090, RTX 5000 Ada, L40, A100 & RunPod & 40 GPU-h & in total \\
+\quad of which final LoRA training & 1$\times$ RTX~3090 & RunPod & 8.8 h & \\
+\quad of which final inference & 1$\times$ A100 40 GB & RunPod & 5 h & \\
+\textbf{Total (RunPod rental; excludes the Claude Code subscription)} & & & \textbf{53.5 GPU-h} & \textbf{15} \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Final Prompt}\label{app:finalprompt}
+The user turn of \cond{cot\_en\_role\_think}, with no system prompt:
+
+\smallskip
+{\footnotesize\ttfamily\raggedright\noindent
+You are an expert Sri Lankan teacher of \{subject\}.\\
+The following is a multiple choice question in Sinhala about \{subject\}.\\
+Think step by step in English, then choose the correct or most suitable answer from the options 1, 2, 3, 4.\\
+End your reply with "Answer: <number>".\\[2pt]
+Question: \{Sinhala question\}\\
+1. \{option 1\}\\
+2. \{option 2\}\\
+3. \{option 3\}\\
+4. \{option 4\}\par}
+
+\smallskip\noindent\{subject\} is the English subject name from the test file. The prompt is rendered with Qwen's chat template, with \texttt{enable\_thinking=True} and a fixed template date.
+
+\section{Declaration Details}\label{app:decl}
+\para{Data used for validation only.} We used two kinds of Sinhala MMLU data for validation, and neither was used for training.
+
+\begin{list}{--}{\leftmargin=1em\itemindent=0pt\itemsep=1pt\parsep=0pt\topsep=2pt}
+\item \emph{Shared-task public dataset.} We used it to choose prompts and methods in phases 1 and 2. Its 70 few-shot questions were used in phase-2 experiments only, and the final system has no few-shot examples and no dataset question in its prompt.
+\item \emph{Screening set 2.} We scored full test-prediction files on these 300 public test questions, using answers we prepared manually with the help of AI, to choose between the systems of phases 3 and 4. This comparison selected our final system.
+\end{list}
+
+\para{Overlap check.} \sinmulu{} comes from the same kind of exam papers as Sinhala MMLU. After the cleaning of Section~\ref{sec:sinmulu}, no test or public question appears in \sinmulu{} with the same question text and at least three of the same options. However, 10 test questions and 1 public question have the same question text with different options, and near-duplicates remain, so zero leakage is not proven.
+
+\section{Experiment Details}\label{app:details}
+
+\begin{center}\captionsetup{type=table}
+\footnotesize
+\caption{The four experimental phases.}\label{tab:phases}
+\begin{tabularx}{\textwidth}{@{}L{0.14\textwidth}L{0.3\textwidth}L{0.2\textwidth}Y@{}}
+\toprule
+Phase & Question, and why we asked it & Models & Main result \\
+\midrule
+\textbf{1. Small-model scouting} & Do models of 1B or less have any signal? They run on free GPUs, so they also test the whole pipeline cheaply. & Gemma-3-1B-it, Qwen3-0.6B, Llama-3.2-1B-Instruct & All at chance, so a larger model is needed. Gemma's tokenizer is about 3 times more efficient on Sinhala. Three scoring bugs found. \\
+\textbf{2. Inference-time study} & What can a 4B model gain with no training? This is cheap, needs no extra data, and sets the baseline. & Gemma-3-4B-it, with NLLB and MADLAD for translation & English reasoning +7.4 points. Translation, calibration, few-shot, cloze, self-consistency and ensembles give no confirmed gain beyond it. \\
+\textbf{3. Fine-tuning} & Can Sinhala exam data add knowledge that prompts cannot? & Gemma-3-4B-it + 6 LoRA adapters & Validation +6.2 points on \sinmulu{}, but the gain on reasoning prompts stays within noise. \\
+\textbf{4. Stronger base model} & Does a newer model built for long reasoning beat further work on Gemma? & Qwen3.5-4B, LoRA, thinking mode & +7.4 points over Gemma; final system 59.7 on screening set 2, 57.58 on the leaderboard. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{center}\captionsetup{type=table}
+\footnotesize
+\caption{Phases 3 and 4 on screening set 2, 300 test questions (accuracy, \%; about $\pm$5.7 overall, $\pm$10 per level), and the leaderboard. S2 is submission 2.}\label{tab:phase2}
+\begin{tabularx}{\columnwidth}{@{}Yrrrr@{}}
+\toprule
+System & Easy & Med. & Hard & All \\
+\midrule
+Gemma, \cond{cot\_en\_role} (S2) & 49 & 46 & 47 & 47.3 \\
++ LoRA Global-MMLU & 53 & 51 & 47 & 50.3 \\
++ LoRA \sinmulu{}, 2 epochs & 49 & 53 & 46 & 49.3 \\
+Qwen, \cond{cot\_en\_role} & 59 & 48 & 57 & 54.7 \\
+Qwen + subject hints, NOT rule & 46 & 46 & 36 & 42.7 \\
+Qwen + combined LoRA & 56 & 53 & 56 & 55.0 \\
+\textbf{+ thinking, 4,096 tokens (final)} & \textbf{59} & \textbf{56} & \textbf{64} & \best{59.7} \\
+\midrule
+\textbf{Final, leaderboard} & \textbf{54.67} & \textbf{52.30} & \textbf{65.77} & \best{57.58} \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{center}\captionsetup{type=table}
+\footnotesize
+\caption{Effect of each component, in accuracy points against its reference. Conf.: screening 1 confirmation set. Set 1: screening set 1. Set 2: screening set 2 (test questions). Val.: adapter validation set.}\label{tab:effects}
+\begin{tabularx}{\columnwidth}{@{}Yrl@{}}
+\toprule
+Component & Effect & Evidence \\
+\midrule
+\multicolumn{3}{@{}l}{\emph{Clear gains}} \\
+English reasoning, teacher role & +7.4 & Conf., $p_\text{H}=1.2\text{e-}6$ \\
+Gemma to Qwen3.5-4B & +7.4 & Set 2, $p=0.04$ \\
+\midrule
+\multicolumn{3}{@{}l}{\emph{Gains that are not significant}} \\
+Thinking mode & +4.7 & Set 2, $p=0.17$ \\
+Ensemble of 3 reasoning prompts & +1.1 & Conf., $p=0.31$ \\
+\midrule
+\multicolumn{3}{@{}l}{\emph{Clear on validation, not on reasoning prompts}} \\
+LoRA, \sinmulu{}, on Gemma & +6.2 & Val. \\
+LoRA, combined data, on Qwen & +10.4 & Val.; Set 2 +0.3 \\
+\midrule
+\multicolumn{3}{@{}l}{\emph{No gain, or worse}} \\
+Option-order averaging of reasoning & +0.7 & Set 1, $p=0.88$ \\
+Bilingual input, MADLAD & +0.4 & Set 1, $p=1.00$ \\
+Negation check & $-$1.3 & Conf., $p=0.33$ \\
+Self-consistency & $-$1.4 & Set 1 \\
+Negation-consistency chain & $-$1.4 & Set 1, $p=0.74$ \\
+Contextual calibration & $-$3.2 & Set 1, $p=0.16$ \\
+English-only input, MADLAD & $-$4.6 & Set 1, $p=0.25$ \\
+Cloze scoring & $-$6.1 & Set 1, $p=0.13$ \\
+Judge each option in turn & $-$10.0 & Set 1, $p=0.001$ \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{center}\captionsetup{type=table}
+\small
+\caption{Training settings of the final adapter.}\label{tab:training}
+\begin{tabularx}{\columnwidth}{@{}L{0.24\columnwidth}Y@{}}
+\toprule
+Setting & Value \\
+\midrule
+LoRA & rank 16, $\alpha = 32$, dropout 0.05 \\
+Targets & attention and MLP projections, and the linear-attention projections of all 32 text layers \\
+Optimiser & AdamW, learning rate $10^{-4}$, cosine schedule with 3\% warm-up, weight decay 0, gradient clipping 1.0 \\
+Epochs & 1 (807 steps) \\
+Batching & 32 questions per step, micro-batches of at most 12,288 padded tokens \\
+Max length & 1,024 tokens \\
+Quantisation & none \\
+Seed & 42 \\
+Libraries & torch 2.8.0, transformers 5.18.0 \citep{wolf2020transformers}, peft 0.21.1 \citep{mangrulkar2022peft}, accelerate 1.15.0, flash-linear-attention 0.4.0 \citep{yang2024fla}, causal-conv1d 1.7.0 \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{center}\captionsetup{type=table}
+\small
+\caption{Phase 1 on 1,851 questions ($\pm$2.0). Label mass: probability on the four digits. Fertility: tokens per Sinhala word.}\label{tab:small}
+\begin{tabularx}{\columnwidth}{@{}Yrrr@{}}
+\toprule
+Model & Acc. & Label mass & Fertility \\
+\midrule
+Qwen3-0.6B & 25.6 & 0.010 & 8.66 \\
+Gemma-3-1B-it & 26.6 & 0.984 & 2.96 \\
+Llama-3.2-1B-Instruct & 25.6 & 0.873 & 10.74 \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\para{Scoring pitfall: the pre-fill and the space token.} Our first run on Gemma had a mean label mass, the total probability on the four digits, of only 0.05. Gemma starts its reply with a phrase or ``**'', and it encodes `` 2'' as a space token and a digit, so after ``Answer:'' the next token is the space. Pre-filling the reply with a trailing space raised the label mass to 1.000 (Table~\ref{tab:prefill}). We therefore report label mass for every run, and trust a condition only if it is at least 0.5.
+
+\begin{center}\captionsetup{type=table}
+\small
+\caption{Answer pre-fill probe, Gemma-3-4B-it, 40 questions. \textvisiblespace{} marks the trailing space.}\label{tab:prefill}
+\begin{tabularx}{\columnwidth}{@{}Yr@{}}
+\toprule
+Text appended after the chat prompt & Label mass \\
+\midrule
+nothing & 0.053 \\
+``\si{පිළිතුර}:'' (Sinhala for ``Answer:'') & 0.000 \\
+\textbf{``\si{පිළිතුර}:\textvisiblespace''} & \textbf{1.000} \\
+\textbf{``Answer:\textvisiblespace''}, English instructions & \textbf{1.000} \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{center}\captionsetup{type=table}
+\small
+\caption{Phase 2, Gemma-3-4B-it on Easy questions of the shared-task public dataset (accuracy, \%). Conf.: 1,483 questions ($\pm$2.5). Gain: confirmation accuracy minus the baseline. Follow-ups at 1,024 tokens have reference 48.9 on screening set 1.}\label{tab:phase1}
+\begin{tabularx}{\columnwidth}{@{}Yrrrl@{}}
+\toprule
+Condition & Set 1 & Conf. & Gain & $p_\text{H}$ \\
+\midrule
+Paper prompt, baseline & 37.5 & 38.2 & -- & -- \\
+Teacher role in Sinhala & 43.6 & -- & & \\
+3-shot, same subject & 42.5 & -- & & \\
+Contextual calibration \citep{zhao2021calibrate} & 34.3 & -- & & \\
+Cloze scoring of option texts & 31.4 & -- & & \\
+4 option orders & 38.6 & -- & & \\
+Reasoning in Sinhala & 43.2 & 36.8 & $-$1.3 & \\
+Reasoning in English (\cond{cot\_en}) & 47.9 & 44.9 & +6.7 & 1.7e-5 \\
++ 2 worked examples & 50.7 & 44.8 & +6.6 & 3.2e-5 \\
+Ensemble \cond{cot\_en} + Sinhala reasoning & 49.3 & 44.0 & +5.9 & 3.8e-5 \\
+\textbf{+ teacher role} (\cond{cot\_en\_role}) & \textbf{48.2} & \best{45.6} & \textbf{+7.4} & \textbf{1.2e-6} \\
+\midrule
+\multicolumn{5}{@{}l}{\emph{Follow-ups to \cond{cot\_en\_role}}} \\
+Bilingual input, MADLAD & 49.3 & -- & & \\
+Translate first (no second model) & 50.4 & -- & & \\
+Self-consistency, 5 samples \citep{wang2023self} & 47.5 & -- & & \\
+Judge each option in turn & 38.9 & -- & & \\
+Option-order averaging of reasoning & 49.6 & -- & & \\
+Negation check in the prompt & 51.4 & 44.3 & +6.1 & \\
+Negation-consistency chain & 47.5 & -- & & \\
+Ensemble of 3 reasoning prompts & 50.4 & 46.7 & +8.5 & \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\para{Reasoning length.} At 512 tokens, 79.3\% of the texts on screening set 1 stated an answer; from 768 tokens up, the limit no longer changed any prediction. On the longer test questions, 512 tokens gave only 62.4\% stated answers and 1,024 gave 99.1\%, so submission~2 used 1,024 tokens.
+
+\para{Confirmation details.} Against the baseline, \cond{cot\_en\_role} is right on 283 questions where the baseline is wrong, and wrong on 173 where it is right. The negation check passed the +2 rule on screening set 1 but fell to 44.3\% on the screening 1 confirmation set. The three-prompt ensemble was only +1.1 over the winner on those questions ($p=0.31$), and we chose it after seeing those results, so it was not adopted.
+
+\para{Adapter details.} Training loss kept falling while validation stopped improving. With reasoning on screening set 1, the base model scored 47.1\%, and the rank-16 \sinmulu{} adapter 46.8\% and 51.4\% after epochs 1 and 2. The final Qwen adapter took 8.8 h on an RTX~3090. Its validation accuracy on 2,745 questions with the digit prompt was 44.4\% at step 0, then 47.4, 49.9, 51.7, 51.7, 52.8, 53.2 and 54.5 at steps 100 to 700, and 54.8\% at step 807.
+
+\begin{center}\captionsetup{type=table}
+\small
+\caption{Gemma-3-4B-it adapters: validation accuracy (\%) with the digit prompt. Each row has its own validation set, so only compare within a row.}\label{tab:adapters}
+\begin{tabularx}{\columnwidth}{@{}Yrrrrr@{}}
+\toprule
+Training data & Rank & Before & Ep.\ 1 & Ep.\ 2 & Ep.\ 3 \\
+\midrule
+Global-MMLU si & 16 & 40.1 & 41.5 & -- & -- \\
+\sinmulu{} & 16 & 40.9 & 47.1 & 47.3 & 45.8 \\
+\sinmulu{}, dropout 0.1 & 8 & 37.5 & 43.8 & 44.4 & -- \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{center}\captionsetup{type=table}
+\small
+\caption{Accuracy (\%) by question type, screening 1 confirmation set.}\label{tab:types}
+\begin{tabularx}{\columnwidth}{@{}Yrrrrr@{}}
+\toprule
+& Neg. & Sub-opt. & Blank & Num. & Plain \\
+\midrule
+$n$ & 157 & 22 & 104 & 119 & 1,123 \\
+Baseline & 37.6 & 27.3 & 28.8 & 35.3 & 39.2 \\
+\cond{cot\_en\_role} & \textbf{50.3} & 31.8 & 35.6 & 37.0 & 46.3 \\
+Gain & \textbf{+12.7} & +4.5 & +6.8 & +1.7 & +7.1 \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\para{Final run.} In the final run, 56.0\% of the reasoning texts stated an answer, and 97.4\% of those agree with the digit we read. The label mass, which is the total probability on the four digits, is 0.999.
+
+\para{Negation and translation.} Translation often loses negation. Of 34 negated questions in screening set 1, the translation kept a negation in only 21 for MADLAD (62\%), 20 for NLLB (59\%) and 19 for self-translation (56\%). On these questions, English reasoning over the original Sinhala scores 58.8\%, against 38.2\% with bilingual input and 29.4\% with English only. A chain that also answers the opposite question hurt too (negated questions fell to 47.1\%), so Gemma decides best when it reasons directly towards one answer.
+
+\para{Reproduction.} The organisers ran our inference script and generated predictions from it. We also checked that the script reproduces the prompts and scoring of all 2,238 questions. On 26 October the phase-2 system was rebuilt from committed code on a new RTX~3090 machine, and all 2,238 test answers matched submission~2.
+
+\clearpage
