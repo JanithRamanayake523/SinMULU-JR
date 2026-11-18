@@ -1,6 +1,0 @@
-# Colab already ships torch/numpy/pandas/pyyaml. Install only what is missing:
-transformers
-accelerate
-sentencepiece
-protobuf
-huggingface_hub

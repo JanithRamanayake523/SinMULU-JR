@@ -6,7 +6,7 @@
 | **Qwen/Qwen3.5-4B** | 4,659,865,088 checkpoint (text model 4,205,751,296, loaded as Qwen3_5ForCausalLM; vision tower not loaded) | 851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a (released 2026-02-27, Apache-2.0) | **base model of the final system** |
 | **LoRA adapter, combined data** (`SinhalaMMLU-SharedTask/team-sinbotics`, `adapter/`) | 30,474,240 (rank 16), merged into the weights | adapter md5 6d42bd99433fbef9b44b48245cdc68cc | **final system**; total at inference 4.24B |
 | google/gemma-3-4b-it | 4,300,079,472 (text 3,880,263,168 + vision 419,816,304; counted from the safetensors) | 093f9f388b31de276ce2de164bdc2081324b9767 | base model of submissions 1 and 2, and of the Gemma LoRA runs |
-| google/gemma-3-1b-it, Qwen/Qwen3-0.6B, meta-llama/Llama-3.2-1B-Instruct | 1.0B / 0.6B / 1.2B | see archive/phase0_1b/outputs | phase-0 pipeline tests only (all at chance) |
+| google/gemma-3-1b-it, Qwen/Qwen3-0.6B, meta-llama/Llama-3.2-1B-Instruct | 1.0B / 0.6B / 1.2B | results in results/phase0_1b | phase-0 pipeline tests only (all at chance) |
 | facebook/nllb-200-distilled-600M | 615,073,792 (tied) | f8d333a098d19b4fd9a8b18f94170487ad3f821d | screening only: Sinhala→English; CC-BY-NC 4.0 |
 | google/madlad400-3b-mt | 2,940,374,016 | fa184c675da0b5c9e1c8694fccd4e12e2d422094 | screening only: Sinhala→English; Apache 2.0 |
 | google/gemma-3-4b-pt | 4,300,079,472 | see outputs/*/config.json | screening reference only |

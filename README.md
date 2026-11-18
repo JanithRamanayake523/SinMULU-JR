@@ -41,13 +41,15 @@ runpod/                  pod setup, model download, the final training / inferen
 runpod/experiments/      the scripts of the earlier experiment rounds (dated)
 final_submission/        mirror of the Hugging Face submission repo (inference.py, README, training code; no weights)
 tests/                   offline tests (no model): python -m pytest -q
+report/                  submitted system description report (ACL LaTeX + PDF), appendices, slides, presenter notes
 results/                 results.csv (one row per dev experiment), dedup report
-report/                  submitted system description report (ACL LaTeX + PDF), slides, presenter notes
-results/runpod/          raw pod outputs per round (gitignored)
-docs/organiser/          organisers' report template (gitignored)
+results/phase0_1b/       results of the phase-0 (<= 1B models) pipeline tests
+results/runpod/          raw pod outputs per round: 2026-10-24_25, 2026-10-26, 2026-10-27 (gitignored)
 docs/log.md              lab notebook: decisions and results, newest first
-archive/                 earlier student code, phase-0 (≤ 1B) results, old notes
-gitignored               data/ dev/ outputs/ cache/ models/ lora_adapters/ logs/ submissions/ results/runpod/
+docs/organiser/          organisers' report template (gitignored)
+papers/                  notes on the SinhalaMMLU paper
+MANIFEST.md              models, data and closed-API disclosure
+gitignored               data/ dev/ outputs/ cache/ models/ lora_adapters/ logs/ predictions/ submissions/ results/runpod/
                          (the task data may not be redistributed; weights and raw outputs are too large)
 ```
 

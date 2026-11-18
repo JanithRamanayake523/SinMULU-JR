@@ -189,7 +189,7 @@ always answering "1" scores 27.5% (the chance line for this subset); 95% CI at n
 
 ## 2026-10-24: codebase cleanup (single owner from now on)
 - Replaced the student `src/` scripts with the `sinmmlu/` package; old code, notebooks, cluster package and the
-  phase-0 results are in `archive/`. A full backup of the pre-cleanup tree was taken before moving anything.
+  phase-0 results are in `results/phase0_1b/`. A full backup of the pre-cleanup tree was taken before moving anything.
 - Verified: same data counts (train 1,851, test 642/1,111/485), same dedup result (18/100/21), and the new scoring
   gives identical probabilities to the old code on all 16 prompt × perms × calibration settings, except
   English-subject + calibration, where the old code built the calibration prompts with the Sinhala subject name (bug).
@@ -205,4 +205,4 @@ always answering "1" scores 27.5% (the chance line for this subset); 95% CI at n
 ## 2026-10-15: phase 0 (students)
 Qwen3-0.6B, Gemma-3-1B-it, Llama-3.2-1B-Instruct on all 1,851 Easy dev questions: all at chance (22–28%).
 Digit mass with the chat template: Gemma 0.98, Llama 0.87, Qwen 0.03. Fertility (tokens per word): Gemma 2.96,
-Qwen 8.66, Llama 10.74. Details: archive/phase0_1b/results/results.csv.
+Qwen 8.66, Llama 10.74. Details: results/phase0_1b/results.csv.
